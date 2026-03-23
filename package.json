@@ -1,0 +1,20 @@
+{
+    "name": "biger",
+    "version": "0.1.0",
+    "private": "true",
+    "license": "MIT",
+    "workspaces": [
+        "packages/*"
+    ],
+    "scripts": {
+        "prepare": "yarn build:common && yarn build:language-server && yarn build:webview && yarn build:extension",
+        "build:common": "yarn --cwd packages/common",
+        "build:extension": "yarn --cwd packages/extension",
+        "build:language-server": "yarn --cwd packages/language-server",
+        "build:webview": "yarn --cwd packages/webview"
+    },
+    "dependencies": {
+        "react": "^19.1.0",
+        "react-dom": "^19.1.0"
+    }
+}

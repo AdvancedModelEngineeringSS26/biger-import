@@ -1,0 +1,32 @@
+{
+    "name": "biger-language-server",
+    "description": "Language server of bigER",
+    "version": "0.1.0",
+    "private": true,
+    "license": "MIT",
+    "author": "Philipp-Lorenz Glaser",
+    "type": "module",
+    "dependencies": {
+        "@biger/common": "*",
+        "reflect-metadata": "^0.2.2",
+        "langium": "^4.2.0",
+        "langium-sprotty": "^4.2.0",
+        "sprotty": "^1.4.0",
+        "sprotty-elk": "^1.4.0",
+        "vscode-languageserver": "^9.0.1"
+    },
+    "devDependencies": {
+        "@types/node": "^18.0.0",
+        "langium-cli": "^4.2.0",
+        "rimraf": "^5.0.0",
+        "typescript": "^5.7.3"
+    },
+    "scripts": {
+        "prepare": "yarn run clean && yarn run langium:generate && yarn run build",
+        "clean": "rimraf src/generated",
+        "build": "tsc --noEmit",
+        "watch": "tsc --noEmit --watch",
+        "langium:generate": "langium generate",
+        "langium:watch": "langium generate --watch"
+    }
+}

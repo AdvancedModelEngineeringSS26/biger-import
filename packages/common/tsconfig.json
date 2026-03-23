@@ -1,0 +1,12 @@
+{
+	"compilerOptions": {
+    "outDir": "out",
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": false,
+    "module": "commonjs", // or appropriate module
+    "target": "ES2020",   // or your preferred target
+    "rootDir": "src"
+  },
+  "include": ["src"]
+}

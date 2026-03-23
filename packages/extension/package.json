@@ -1,0 +1,173 @@
+{
+    "name": "biger",
+    "displayName": "bigER",
+    "description": "ER modeling tool for VS Code",
+    "version": "0.1.0",
+    "license": "MIT",
+    "files": [
+        "server",
+        "syntaxes",
+        "webview"
+    ],
+    "scripts": {
+        "prepare": "yarn run clean && yarn run build",
+        "clean": "rimraf pack",
+        "build": "node esbuild.mjs",
+        "watch": "node esbuild.mjs --watch"
+    },
+    "dependencies": {
+        "@biger/common": "*"
+    },
+    "devDependencies": {
+        "@types/node": "^18.0.0",
+        "@types/vscode": "~1.67.0",
+        "esbuild": "^0.25.0",
+        "rimraf": "^5.0.0",
+        "sprotty-vscode": "^1.0.0",
+        "vscode-languageclient": "^9.0.1"
+    },
+    "engines": {
+        "vscode": "^1.67.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "entity-relationship",
+                "aliases": [
+                    "Entity Relationship",
+                    "entity-relationship",
+                    "ER"
+                ],
+                "extensions": [".er", ".erd"],
+                "configuration": "./language-configuration.json",
+                "icon": {
+                    "light": "./media/file-icon-light.png",
+                    "dark": "./media/file-icon-dark.png"
+				}
+            }
+        ],
+        "grammars": [
+            {
+                "language": "entity-relationship",
+                "scopeName": "source.entity-relationship",
+                "path": "syntaxes/entity-relationship.tmLanguage.json"
+            }
+        ],
+        "commands": [
+            {
+                "command": "biger.import",
+                "title": "Import",
+                "icon": "$(cloud-download)",
+                "category": "ER"
+            },
+            {
+                "command": "biger.diagram.open",
+                "title": "Open in Diagram",
+                "icon": "$(symbol-structure)",
+                "category": "ER Diagram"
+            },
+            {
+                "command": "biger.diagram.fit",
+                "title": "Fit to Screen",
+                "category": "ER Diagram"
+            },
+            {
+                "command": "biger.diagram.center",
+                "title": "Center selection",
+                "category": "ER Diagram"
+            },
+            {
+                "command": "biger.diagram.delete",
+                "title": "Delete selected element",
+                "category": "ER Diagram"
+            },
+            {
+                "command": "biger.diagram.export",
+                "title": "Export diagram to SVG",
+                "category": "ER Diagram"
+            }
+        ],
+        "menus": {
+            "commandPalette": [
+                {
+                    "command": "biger.import",
+                    "when": "editorLangId == 'entity-relationship'"
+                },
+                {
+                    "command": "biger.diagram.open",
+                    "when": "editorLangId == 'entity-relationship'"
+                },
+                {
+                    "command": "biger.diagram.fit",
+                    "when": "er-diagram-focused"
+                },
+                {
+                    "command": "biger.diagram.center",
+                    "when": "er-diagram-focused"
+                },
+                {
+                    "command": "biger.diagram.export",
+                    "when": "er-diagram-focused"
+                },
+                {
+                    "command": "biger.diagram.delete",
+                    "when": "er-diagram-focused"
+                }
+            ],
+            "editor/context": [
+                {
+                    "command": "biger.import",
+                    "when": "editorLangId == 'entity-relationship'",
+                    "group": "navigation"
+                },
+                {
+                    "command": "biger.diagram.open",
+                    "when": "editorLangId == 'entity-relationship'",
+                    "group": "navigation"
+                }
+            ],
+            "editor/title": [
+                {
+                    "command": "biger.diagram.open",
+                    "when": "editorLangId == 'entity-relationship'",
+                    "group": "navigation"
+                }
+            ],
+            "explorer/context": [
+                {
+                    "command": "biger.diagram.open",
+                    "when": "resourceExtname == '.er'",
+                    "group": "navigation"
+                }
+            ]
+        },
+        "keybindings": [
+            {
+                "key": "ctrl+f",
+                "mac": "cmd+f",
+                "command": "biger.diagram.fit",
+                "when": "er-diagram-focused"
+            },
+            {
+                "key": "ctrl+c",
+                "mac": "cmd+c",
+                "command": "biger.diagram.center",
+                "when": "er-diagram-focused"
+            },
+            {
+                "key": "ctrl+backspace",
+                "mac": "cmd+backspace",
+                "command": "biger.diagram.delete",
+                "when": "er-diagram-focused"
+            }
+        ]
+    },
+    "activationEvents": [
+        "onLanguage:entity-relationship",
+        "onCommand:biger.import"
+    ],
+    "main": "./pack/extension/src/main.cjs"
+}

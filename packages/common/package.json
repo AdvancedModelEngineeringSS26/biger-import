@@ -1,0 +1,15 @@
+{
+    "name": "@biger/common",
+    "version": "0.1.0",
+    "main": "out/index.js",
+    "scripts": {
+        "prepare": "yarn run clean && yarn run build",
+        "clean": "rimraf out",
+        "build": "tsc"
+    },
+    "devDependencies": {
+        "@types/node": "^18.0.0",
+        "typescript": "~5.1.6",
+        "rimraf": "^5.0.0"
+    }
+  }

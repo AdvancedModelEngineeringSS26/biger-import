@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "module": "commonjs",
+        "moduleResolution": "node",
+        "target": "ES2017",
+        "lib": [
+            "ES2017"
+        ],
+        "sourceMap": true,
+        "declaration": true,
+        "declarationMap": true,
+        "downlevelIteration": true,
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true,
+        "noUnusedLocals": true,
+        "noImplicitOverride": true,
+        "skipLibCheck": true,
+        "strict": true,
+        "strictPropertyInitialization": false
+    }
+}

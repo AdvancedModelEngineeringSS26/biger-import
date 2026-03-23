@@ -1,0 +1,30 @@
+name: Build
+
+# run workflow on manual dispatches or push/pull request to main branch
+on: 
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # build on ubuntu/macos/windows with Node 18
+  build:
+    strategy:
+      matrix:
+        node: [ '20.10.0' ]
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} (Node ${{ matrix.node }})
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install dependencies & build extension
+        run: yarn

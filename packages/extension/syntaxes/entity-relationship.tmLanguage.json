@@ -1,0 +1,72 @@
+{
+  "name": "entity-relationship",
+  "scopeName": "source.entity-relationship",
+  "fileTypes": [
+    ".er",
+    ".erd"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "name": "keyword.control.entity-relationship",
+      "match": "\\b(0\\.\\.N|1\\.\\.N|N|bachman|chen|crowfoot|default|derived|entity|erdiagram|extends|key|multivalued|none|notation|optional|package|partial_key|private|protected|public|relationship|uml|weak)\\b|\\B(-o)\\b|\\b(o-)\\B"
+    },
+    {
+      "name": "string.quoted.double.entity-relationship",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "include": "#string-character-escape"
+        }
+      ]
+    },
+    {
+      "name": "string.quoted.single.entity-relationship",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "include": "#string-character-escape"
+        }
+      ]
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.entity-relationship",
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.entity-relationship"
+            }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.entity-relationship"
+            }
+          }
+        },
+        {
+          "begin": "//",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.whitespace.comment.leading.entity-relationship"
+            }
+          },
+          "end": "(?=$)",
+          "name": "comment.line.entity-relationship"
+        }
+      ]
+    },
+    "string-character-escape": {
+      "name": "constant.character.escape.entity-relationship",
+      "match": "\\\\(x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|u\\{[0-9A-Fa-f]+\\}|[0-2][0-7]{0,2}|3[0-6][0-7]?|37[0-7]?|[4-7][0-7]?|.|$)"
+    }
+  }
+}

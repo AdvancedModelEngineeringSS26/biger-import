@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# npm/yarn
+node_modules/
+packages/*/node_modules/
+package-lock.json
+# only ignore yarn.lock from root directory
+yarn.lock
+.yarn-integrity
+
+# build files
+out
+pack

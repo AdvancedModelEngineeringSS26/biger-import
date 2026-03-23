@@ -1,0 +1,208 @@
+svg {
+    outline: none; /* removes border when clicking into diagram */
+}
+
+.sprotty {
+    user-select: none;
+}
+.sprotty-hidden {
+    width: 0px;
+    height: 0px;
+}
+
+.sprotty-graph.selected {
+    border: none;
+}
+  
+text {
+    stroke-width: 0;
+    fill: #000;
+    font-family: sans-serif;
+    font-size: var(--vscode-editor-font-size);
+
+}
+
+.sprotty-node {
+    stroke-width: 1;
+    fill: rgb(219,218,235);
+    /*fill: var(--vscode-list-inactiveSelectionBackground);*/
+    /*stroke: rgb(27, 27, 27);*/
+    stroke: var(--vscode-list-deemphasizedForeground);
+}
+
+.sprotty-node.selected {
+    stroke-width: 5;
+    stroke: yellow;
+    /*fill: var(--vscode-list-activeSelectionBackground);*/
+
+}
+.sprotty-node.mouseover:not(.selected) {
+    stroke-width: 3;
+    stroke: orange;
+    /*stroke: var(--vscode-list-activeSelectionForeground);
+    fill: var(--vscode-list-hoverBackground);*/
+}
+
+.relationship > .sprotty-node {
+    fill: white;
+}
+
+.sprotty-edge.partial {
+    stroke-opacity: 60%;
+    stroke-dasharray: 8;
+}
+
+.header {
+    font-size: 18px;
+    font-weight: bold;
+}
+.comp-separator {
+    stroke-width: 1;
+    stroke: var(--vscode-list-deemphasizedForeground);;
+}
+
+.sprotty-edge.inheritance {
+    stroke-width: 3;
+    stroke:rgb(255, 255, 255);
+}
+
+.relationship {
+    font-size: 16px;
+}
+
+.weak > .sprotty-node {
+    border-style: ridge;
+    stroke: black;
+    stroke-width: 8;
+}
+
+.weak-relationship > .sprotty-node {
+    fill: white;
+    stroke: black;
+    border-style: ridge;
+    stroke-width: 8;
+}
+
+.border-weak {
+    stroke: white;
+    stroke-width: 1;
+    fill: black;
+}
+
+.visibility {
+    fill: #569cd6;
+}
+
+.key {
+    font-style: italic;
+    text-decoration: underline;
+}
+.partial-key {
+    font-style: italic;
+    text-decoration: underline;
+    fill: gray;
+}
+.derived {
+    fill: gray;
+}
+
+.right.sprotty-label {
+    fill: white;
+}
+
+.top.sprotty-label {
+    fill: var(--vscode-foreground);
+}
+
+.top-left.sprotty-label {
+    fill: var(--vscode-foreground);
+}
+
+.top-right.sprotty-label {
+    fill: var(--vscode-foreground);
+}
+
+.bottom.sprotty-label {
+    fill: var(--vscode-foreground);
+}
+
+.bottom-left.sprotty-label {
+    fill: var(--vscode-foreground);
+}
+
+.bottom-right.sprotty-label {
+    fill: var(--vscode-foreground);
+}
+
+.sprotty-edge {
+    fill: none;
+    stroke: var(--vscode-editorActiveLineNumber-foreground);
+    stroke-width: 2;
+}
+
+.sprotty-edge.mouseover:not(.selected) {
+    stroke-width: 6;
+}
+
+.sprotty-edge.selected {
+    stroke: yellow;
+    stroke-width: 5;
+}
+
+.sprotty-button {
+    fill: var(--vscode-editorActiveLineNumber-foreground);
+    cursor: pointer;
+}
+
+.sprotty-button.mouseover:not(.selected) {
+    fill: var(--vscode-editor-symbolHighlightBackground);
+    stroke-width: 5;
+}
+
+.sprotty-edge-arrow {
+    fill:var(--vscode-editorActiveLineNumber-foreground);
+}
+
+.sprotty-edge > .sprotty-routing-handle.mouseover {
+    stroke: var(--vscode-editor-symbolHighlightBackground);
+    stroke-width: 3;
+}
+
+.sprotty-edge > .sprotty-routing-handle {
+    fill: var(--vscode-editor-selectionBackground);
+    stroke: none;
+    z-index: 1000;
+}
+
+.sprotty-edge > .sprotty-routing-handle[data-kind='line'] {
+    opacity: 0.35;
+}
+
+.sprotty-edge > .sprotty-routing-handle.selected {
+    fill: var(--vscode-editor-selectionHighlightBackground);
+}
+
+.sprotty-status {
+    position: absolute;
+    top: 100px;
+	font-size: 15px;
+	z-index: 1;
+}
+.sprotty-status .error {
+    color: orangered;
+}
+.sprotty-status-message.error {
+	background-color: white;
+	border: 1px solid black;
+	padding: 10px;
+	margin-left: 15px;
+}
+.sprotty-status .fatal {
+	color: orangered;
+}
+.sprotty-status-message.fatal {
+	background-color: white;
+	border: 1px solid black;
+	padding: 10px;
+	margin-left: 15px;
+}
