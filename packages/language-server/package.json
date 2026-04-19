@@ -8,9 +8,10 @@
     "type": "module",
     "dependencies": {
         "@biger/common": "*",
-        "reflect-metadata": "^0.2.2",
         "langium": "^4.2.0",
         "langium-sprotty": "^4.2.0",
+        "node-sql-parser": "^5.4.0",
+        "reflect-metadata": "^0.2.2",
         "sprotty": "^1.4.0",
         "sprotty-elk": "^1.4.0",
         "vscode-languageserver": "^9.0.1"

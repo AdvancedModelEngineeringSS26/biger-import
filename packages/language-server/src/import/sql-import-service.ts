@@ -1,3 +1,4 @@
+import { Parser } from 'node-sql-parser';
 import type { ImportSqlParams, ImportSqlResult } from '@biger/common';
 
 export class SqlImportService {
