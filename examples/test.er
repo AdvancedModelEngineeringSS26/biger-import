@@ -1,20 +1,17 @@
-erdiagram test
+erdiagram ImportedFromSql
 notation = uml
 
-entity Entity4 {
-    attr
+entity Authors {
+    id: INT
+    name: VARCHAR(255)
 }
 
-entity Entity3 {
-    attr
+entity Books {
+    id: INT
+    author_id: INT
+    title: VARCHAR(255)
 }
 
-
-entity Entity5 {
-    attr
-}
-
-
-relationship Rel {
-    Entity4 [1..N] -* Entity5
+relationship AuthorsBooks {
+    Authors [1] -> Books [0..N]
 }
