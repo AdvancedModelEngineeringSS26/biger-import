@@ -8,4 +8,5 @@ export interface ImportSqlParams {
 
 export interface ImportSqlResult {
     erContent: string;
+    error?: string;
 }

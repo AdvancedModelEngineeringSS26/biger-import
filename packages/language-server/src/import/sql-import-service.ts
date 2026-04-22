@@ -12,7 +12,13 @@ export class SqlImportService {
         console.log(`[biger.import] SQL content length: ${params.sqlContent.length}`);
 
         const parser = new Parser();
-        const statements = asArray(parser.astify(params.sqlContent, { database: 'mysql' })).map(asNode);
+        let statements: SqlNode[];
+        try {
+            statements = asArray(parser.astify(params.sqlContent, { database: 'mysql' })).map(asNode);
+        } catch (e) {
+            const message = e instanceof Error ? e.message : String(e);
+            return { erContent: '', error: `SQL parse error: ${message}` };
+        }
         const tables = statements
             .filter(statement => readValue(statement, 'type') === 'create' && readValue(statement, 'keyword') === 'table')
             .map(statement => toTableModel(asNode(statement)))

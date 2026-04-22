@@ -37,6 +37,10 @@ export function registerImportCommand(context: vscode.ExtensionContext, language
         };
 
         const importResult = await languageClient.sendRequest<ImportSqlResult>(IMPORT_SQL_REQUEST, importParams);
+        if (importResult.error) {
+            void vscode.window.showErrorMessage(`SQL import failed: ${importResult.error}`);
+            return;
+        }
         await overwriteDocument(editor.document, importResult.erContent);
     });
 
