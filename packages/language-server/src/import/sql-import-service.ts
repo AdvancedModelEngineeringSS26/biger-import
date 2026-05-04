@@ -14,15 +14,20 @@ export class SqlImportService {
         const parser = new Parser();
         let statements: SqlNode[];
         try {
-            statements = asArray(parser.astify(params.sqlContent, { database: 'mysql' })).map(asNode);
+            statements = asArray(parser.astify(params.sqlContent, { database: params.dialect })).map(asNode);
         } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
-            return { erContent: '', error: `SQL parse error: ${message}` };
+            return { erContent: '', error: `Failed to parse SQL as ${params.dialect}: ${message}` };
         }
+
         const tables = statements
             .filter(statement => readValue(statement, 'type') === 'create' && readValue(statement, 'keyword') === 'table')
             .map(statement => toTableModel(asNode(statement)))
             .filter((table): table is TableModel => table !== undefined);
+
+        if (tables.length === 0) {
+            return { erContent: '', error: 'No CREATE TABLE statements found in the SQL file.' };
+        }
 
         return {
             erContent: toErDiagram(tables)

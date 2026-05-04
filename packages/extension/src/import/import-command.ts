@@ -1,14 +1,28 @@
-import { IMPORT_SQL_REQUEST, type ImportSqlParams, type ImportSqlResult } from '@biger/common';
+import { IMPORT_SQL_REQUEST, type ImportSqlParams, type ImportSqlResult, type SqlDialect } from '@biger/common';
 import * as vscode from 'vscode';
 import type { LanguageClient } from 'vscode-languageclient/node.js';
 
 const ER_LANGUAGE_ID = 'entity-relationship';
+
+const DIALECT_OPTIONS: { label: string; dialect: SqlDialect }[] = [
+    { label: 'MySQL', dialect: 'MySQL' },
+    { label: 'PostgreSQL', dialect: 'PostgreSQL' },
+];
 
 export function registerImportCommand(context: vscode.ExtensionContext, languageClient: LanguageClient): void {
     const commandDisposable = vscode.commands.registerCommand('biger.import', async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor || editor.document.languageId !== ER_LANGUAGE_ID) {
             void vscode.window.showErrorMessage('Open an .er file before running Import.');
+            return;
+        }
+
+        const selectedDialect = await vscode.window.showQuickPick(DIALECT_OPTIONS, {
+            title: 'Select SQL Dialect',
+            placeHolder: 'Choose the dialect of the SQL file you want to import'
+        });
+
+        if (!selectedDialect) {
             return;
         }
 
@@ -33,7 +47,8 @@ export function registerImportCommand(context: vscode.ExtensionContext, language
         const importParams: ImportSqlParams = {
             erDocumentUri: editor.document.uri.toString(),
             sqlDocumentUri: sqlFileUri.toString(),
-            sqlContent
+            sqlContent,
+            dialect: selectedDialect.dialect
         };
 
         const importResult = await languageClient.sendRequest<ImportSqlResult>(IMPORT_SQL_REQUEST, importParams);
