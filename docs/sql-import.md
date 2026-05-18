@@ -144,6 +144,36 @@ ErModel
 
 ---
 
+## Testing
+
+Unit tests live in `packages/language-server/test/import/`. The test runner is **Vitest** (ESM-native, TypeScript-first, no transpile config required).
+
+### Running the tests
+
+```bash
+# from packages/language-server
+yarn test          # run once
+yarn test:watch    # watch mode
+```
+
+Or target a single file:
+
+```bash
+yarn vitest run test/import/sql-parser.test.ts
+```
+
+### Test files
+
+| File | Phase tested | What it covers |
+|---|---|---|
+| `test/import/sql-parser.test.ts` | Phase 1 | Table name parsing, column data types (with length/scale), nullability, inline PK / UNIQUE / AUTO_INCREMENT / DEFAULT, table-level PK constraint (named, composite), FOREIGN KEY (named, ON DELETE / ON UPDATE), UNIQUE and CHECK constraints, both dialects |
+| `test/import/schema-analyzer.test.ts` | Phase 2 | Entity name derivation (snake_case → PascalCase), attribute modifiers (key / optional / none), data type formatting, relationship creation (left/right entity, kind, cardinality), FK to unknown table filtered out, two FKs from one table, empty schema |
+| `test/import/er-serializer.test.ts` | Phase 3 | Header, entity blocks with all modifier variants, attribute without data type, relationship body with cardinality and arrow symbol, entity-before-relationship ordering, multiple entities/relationships, empty model |
+
+Each test file is fully independent — Phase 2 and Phase 3 tests construct their input data directly without calling earlier phases.
+
+---
+
 ## Possible Heuristics to Implement
 
 The `SchemaModel` already captures all the information needed for the following improvements. All changes belong in `schema-analyzer.ts`.

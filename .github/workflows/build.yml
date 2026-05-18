@@ -28,3 +28,5 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Install dependencies & build extension
         run: yarn
+      - name: Run unit tests
+        run: yarn --cwd packages/language-server test

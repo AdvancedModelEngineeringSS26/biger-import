@@ -65,7 +65,7 @@ function extractColumn(def: SqlNode): SchemaColumn | undefined {
         name,
         dataType,
         nullable,
-        isPrimaryKey: def['primary'] !== undefined,
+        isPrimaryKey: def['primary_key'] !== undefined,
         isUnique: def['unique'] !== undefined,
         autoIncrement: def['auto_increment'] !== undefined,
         defaultValue: extractDefaultValue(def['default_val']),
