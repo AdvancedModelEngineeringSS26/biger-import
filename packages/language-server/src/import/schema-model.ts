@@ -1,4 +1,8 @@
-export type SchemaDialect = 'MySQL' | 'PostgreSQL';
+export type SchemaDialect =
+    | 'MySQL' | 'PostgreSQL'
+    | 'Hive' | 'DB2' | 'FlinkSQL' | 'MariaDB' | 'Sqlite'
+    | 'Snowflake' | 'Redshift'
+    | 'TransactSQL' | 'BigQuery';
 
 export interface SchemaModel {
     readonly dialect: SchemaDialect;

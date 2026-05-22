@@ -8,7 +8,21 @@ This document describes the SQL import feature of bigER: what it does, how to us
 
 The SQL import feature reads a `.sql` file containing `CREATE TABLE` statements and converts it into a bigER `.er` diagram. Each table becomes an entity, column definitions become attributes, and foreign key constraints become relationships.
 
-Supported SQL dialects: **MySQL** and **PostgreSQL**.
+### Supported dialects
+
+| Dialect | Entities & columns | Relationships | Notes |
+|---|---|---|---|
+| MySQL | ✓ | ✓ | Full support |
+| PostgreSQL | ✓ | ✓ | Full support |
+| MariaDB | ✓ | ✓ | MySQL fork, identical behaviour |
+| SQLite | ✓ | ✓ | Full support |
+| Hive | ✓ | ✓ | Native types: `BIGINT`, `DOUBLE`, `STRING`, `TIMESTAMP` |
+| IBM DB2 | ✓ | ✓ | Full support |
+| Amazon Redshift | ✓ | ✓ | Full support |
+| Snowflake | ✓ | ✓ | Alpha support in node-sql-parser |
+| Apache Flink SQL | ✓ | ✓ | Single-line SQL only; the underlying parser does not accept newlines |
+| T-SQL / SQL Server | ✓ | ✗ | `FOREIGN KEY` clauses cause a parse error in the underlying library; import SQL files that have FK constraints removed |
+| BigQuery | ✓ | ✗ | `FOREIGN KEY` clauses cause a parse error; BigQuery does not enforce FKs anyway |
 
 ---
 
@@ -166,7 +180,7 @@ yarn vitest run test/import/sql-parser.test.ts
 
 | File | Phase tested | What it covers |
 |---|---|---|
-| `test/import/sql-parser.test.ts` | Phase 1 | Table name parsing, column data types (with length/scale), nullability, inline PK / UNIQUE / AUTO_INCREMENT / DEFAULT, table-level PK constraint (named, composite), FOREIGN KEY (named, ON DELETE / ON UPDATE), UNIQUE and CHECK constraints, both dialects |
+| `test/import/sql-parser.test.ts` | Phase 1 | Table name parsing, column data types (with length/scale), nullability, inline PK / UNIQUE / AUTO_INCREMENT / DEFAULT, table-level PK constraint (named, composite), FOREIGN KEY (named, ON DELETE / ON UPDATE), UNIQUE and CHECK constraints; dialect-specific tests for all 11 supported dialects (including Redshift column-name shape, and T-SQL / BigQuery FK-throws assertions) |
 | `test/import/schema-analyzer.test.ts` | Phase 2 | Entity name derivation (snake_case → PascalCase), attribute modifiers (key / optional / none), data type formatting, relationship creation (left/right entity, kind, cardinality), FK to unknown table filtered out, two FKs from one table, empty schema |
 | `test/import/er-serializer.test.ts` | Phase 3 | Header, entity blocks with all modifier variants, attribute without data type, relationship body with cardinality and arrow symbol, entity-before-relationship ordering, multiple entities/relationships, empty model |
 

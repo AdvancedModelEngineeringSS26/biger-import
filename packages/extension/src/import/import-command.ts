@@ -5,8 +5,17 @@ import type { LanguageClient } from 'vscode-languageclient/node.js';
 const ER_LANGUAGE_ID = 'entity-relationship';
 
 const DIALECT_OPTIONS: { label: string; dialect: SqlDialect }[] = [
-    { label: 'MySQL', dialect: 'MySQL' },
-    { label: 'PostgreSQL', dialect: 'PostgreSQL' },
+    { label: 'MySQL',                        dialect: 'MySQL' },
+    { label: 'PostgreSQL',                   dialect: 'PostgreSQL' },
+    { label: 'MariaDB',                      dialect: 'MariaDB' },
+    { label: 'SQLite',                       dialect: 'Sqlite' },
+    { label: 'Hive',                         dialect: 'Hive' },
+    { label: 'IBM DB2',                      dialect: 'DB2' },
+    { label: 'Amazon Redshift',              dialect: 'Redshift' },
+    { label: 'Snowflake',                    dialect: 'Snowflake' },
+    { label: 'Apache Flink SQL',             dialect: 'FlinkSQL' },
+    { label: 'T-SQL / SQL Server (no FK)',   dialect: 'TransactSQL' },
+    { label: 'BigQuery (no FK)',             dialect: 'BigQuery' },
 ];
 
 export function registerImportCommand(context: vscode.ExtensionContext, languageClient: LanguageClient): void {

@@ -155,7 +155,10 @@ function extractColumnName(value: unknown): string | undefined {
     }
     const inner = toNode(node['column']);
     const innerExpr = toNode(inner['expr']);
-    return typeof innerExpr['column'] === 'string' ? innerExpr['column'] : undefined;
+    if (typeof innerExpr['column'] === 'string') return innerExpr['column'];
+    // Redshift/BigQuery: { column: { expr: { type: "default", value: string } } }
+    if (typeof innerExpr['value'] === 'string') return innerExpr['value'];
+    return undefined;
 }
 
 // Handles three shapes node-sql-parser uses for referenced table names:
