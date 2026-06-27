@@ -5,8 +5,9 @@
 node_modules/
 packages/*/node_modules/
 package-lock.json
-# only ignore yarn.lock from root directory
-yarn.lock
+# commit the root yarn.lock for reproducible CI installs;
+# ignore any stray lockfiles inside workspace packages
+packages/*/yarn.lock
 .yarn-integrity
 
 # build files
