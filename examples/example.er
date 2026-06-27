@@ -17,13 +17,22 @@ entity Order {
     id: INT key
     amount: DECIMAL(10, 2)
     customer_id: INT
-    product_id: INT
+}
+
+entity OrderItem {
+    order_id: INT key
+    product_id: INT key
+    quantity: INT
 }
 
 relationship CustomerOrder {
     Customer [1] -> Order [0..N]
 }
 
-relationship ProductOrder {
-    Product [1] -> Order [0..N]
+relationship OrderOrderItem {
+    Order [1] -> OrderItem [0..N]
+}
+
+relationship ProductOrderItem {
+    Product [1] -> OrderItem [0..N]
 }

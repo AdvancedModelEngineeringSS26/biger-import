@@ -181,26 +181,48 @@ yarn vitest run test/import/sql-parser.test.ts
 | File | Phase tested | What it covers |
 |---|---|---|
 | `test/import/sql-parser.test.ts` | Phase 1 | Table name parsing, column data types (with length/scale), nullability, inline PK / UNIQUE / AUTO_INCREMENT / DEFAULT, table-level PK constraint (named, composite), FOREIGN KEY (named, ON DELETE / ON UPDATE), UNIQUE and CHECK constraints; dialect-specific tests for all 11 supported dialects (including Redshift column-name shape, and T-SQL / BigQuery FK-throws assertions) |
-| `test/import/schema-analyzer.test.ts` | Phase 2 | Entity name derivation (snake_case → PascalCase), attribute modifiers (key / optional / none), data type formatting, relationship creation (left/right entity, kind, cardinality), FK to unknown table filtered out, two FKs from one table, empty schema |
-| `test/import/er-serializer.test.ts` | Phase 3 | Header, entity blocks with all modifier variants, attribute without data type, relationship body with cardinality and arrow symbol, entity-before-relationship ordering, multiple entities/relationships, empty model |
+| `test/import/schema-analyzer.test.ts` | Phase 2 | Entity name derivation (snake_case → PascalCase), attribute modifiers (key / partial_key / optional / none), data type formatting, relationship creation (left/right entity, kind, cardinality), and every structural heuristic below: junction → M2M, ISA `extends`, weak entity, cardinality inference (nullable + UNIQUE), self-referencing naming, and the precedence between them; FK to unknown table filtered out, two FKs from one table, empty schema |
+| `test/import/er-serializer.test.ts` | Phase 3 | Header, entity blocks with all modifier variants (incl. `partial_key`), `weak entity`, `entity … extends …`, `weak relationship`, attribute without data type, relationship body with cardinality and arrow symbol, entity-before-relationship ordering, multiple entities/relationships, empty model |
+| `test/import/pipeline.test.ts` | All phases | End-to-end SQL → ER DSL: header, realistic blog schema, junction (`OrderItem`) → M2M, ISA `extends`, self-referencing `Employee`, and the `SqlImportService` happy/error paths |
 
 Each test file is fully independent — Phase 2 and Phase 3 tests construct their input data directly without calling earlier phases.
 
 ---
 
-## Possible Heuristics to Implement
+## Implemented Heuristics
 
-The `SchemaModel` already captures all the information needed for the following improvements. All changes belong in `schema-analyzer.ts`.
+Phase 2 (`analyzeSchema` in `schema-analyzer.ts`) turns the raw `SchemaModel` into an `ErModel` by
+applying the structural heuristics below. They are **best-effort inferences from the DDL alone** — see
+[Global limitations](#global-limitations-what-the-heuristics-cannot-do) for what they fundamentally
+cannot do, and [Precedence](#precedence) for how they interact.
 
-### Junction table → many-to-many relationship
+Every table is classified exactly once (`classifyTable`), and the classification drives both entity and
+relationship generation so the two never disagree (e.g. a junction table is never emitted both as an
+entity and as a relationship).
 
-**Condition:** a table whose columns consist entirely of FK columns, and whose PK is a composite of those FK columns (a classic bridge/junction table).
+### Baseline mapping (always applied)
 
-**Current behaviour:** the junction table becomes an entity with `key` attributes.
+| Aspect | Rule |
+|---|---|
+| Entity name | SQL table name → PascalCase (`order_items` → `OrderItems`); leading digit prefixed with `_`; non-word chars become `_` |
+| Attribute | one per column, `name: TYPE` |
+| Data type | `typeName`, plus `(length)` or `(length, scale)` when present |
+| `key` modifier | column is in the primary key (inline `PRIMARY KEY` or a table-level PK constraint, unified) |
+| `optional` modifier | column is explicitly nullable and not part of the PK |
+| Relationship per FK | `{Parent} [1] -> {Child} [card]`, default kind `->` (`RELA_DEFAULT`) |
+| Unresolved FK | an FK whose referenced table is not in the input is **silently dropped** (no relationship) |
+| Name de-duplication | a clashing relationship name gets a `Rel` suffix |
 
-**Proposed behaviour:** skip generating an entity for the junction table; instead generate a single relationship between the two referenced entities with `[0..N]` cardinality on both sides.
+---
 
-**Example:**
+### 1. Junction table → many-to-many relationship
+
+**Detects:** a pure bridge table — exactly **two** FKs, a composite PK, and *every* column is part of one
+of those FKs (no payload columns), with both referenced tables present in the schema.
+
+**Produces:** **no entity** for the junction table; instead one relationship between the two referenced
+entities with `[0..N]` on both sides.
+
 ```sql
 CREATE TABLE OrderItem (
     order_id   INT NOT NULL,
@@ -210,54 +232,132 @@ CREATE TABLE OrderItem (
     FOREIGN KEY (product_id) REFERENCES Product(id)
 );
 ```
-→ `relationship OrderProduct { Order [0..N] -> Product [0..N] }` instead of an `OrderItem` entity.
+→ `relationship OrderProduct { Order [0..N] -> Product [0..N] }` — no `OrderItem` entity.
+
+**Cannot do / caveats:**
+- A junction carrying **extra (payload) columns** — e.g. `quantity`, `added_at` — is an *association
+  class*, not a pure bridge. It fails the "every column is an FK column" check and is kept as a **normal
+  entity** with two ordinary relationships. Its attributes would otherwise be lost.
+- Only the exact **2-FK** shape is recognised. Ternary+ junctions (3 FKs) remain entities.
+- The M2M cardinality is fixed at `[0..N]`–`[0..N]`; UNIQUE/nullable constraints on the bridge are **not**
+  reflected in it.
 
 ---
 
-### One-to-one via UNIQUE constraint on FK
+### 2. Inheritance / ISA detection (PK = FK)
 
-**Condition:** the FK source columns are also covered by a UNIQUE constraint on the same table.
+**Detects:** a table whose **entire primary key equals one FK's source columns** (the subtype pattern —
+the child's identity *is* the parent's). Self-references are excluded.
 
-**Current behaviour:** cardinality is always `[0..N]` on the FK-bearing side.
+**Produces:** an `extends Parent` clause on the child entity; the identifying FK produces **no** relationship.
 
-**Proposed behaviour:** change to `[0..1]` (nullable FK) or `[1]` (NOT NULL FK) to express a one-to-one association.
+```sql
+CREATE TABLE Employee (id INT PRIMARY KEY, name VARCHAR(100));
+CREATE TABLE Manager  (id INT PRIMARY KEY, FOREIGN KEY (id) REFERENCES Employee(id));
+```
+→ `entity Manager extends Employee { id: INT key }` and **no** `EmployeeManager` relationship.
 
-**Detection:** check whether `fk.sourceColumns` matches the `columns` list of any entry in `table.uniqueConstraints`.
-
----
-
-### Nullable FK → optional participation cardinality
-
-**Condition:** at least one FK source column is nullable (no NOT NULL constraint).
-
-**Current behaviour:** cardinality is always `[0..N]` regardless of nullability.
-
-**Proposed behaviour:**
-- All FK source columns NOT NULL → `[1..N]` (mandatory participation — every referenced row has at least one child)
-- Any FK source column nullable → `[0..N]` (optional participation)
-
-**Detection:** look up each FK source column by name in `ownerTable.columns` and check `column.nullable`. The hook for this already exists in `resolveCardinality` in `schema-analyzer.ts`.
+**Cannot do / caveats:**
+- **Single inheritance only.** If two FKs each equal the PK, only the first becomes `extends`; the rest
+  fall through to normal relationships.
+- Detection is by **column set equality of source columns vs. PK**; it does *not* verify that
+  `fk.referencedColumns` are the parent's PK. A child whose PK references a non-PK parent column is still
+  treated as ISA.
+- The shared PK column is kept as a `key` attribute on the child (the DSL has no "inherited key" concept).
 
 ---
 
-### Inheritance / ISA detection (PK = FK)
+### 3. Weak entity (FK is part of, but not all of, the PK)
 
-**Condition:** a table's entire primary key is also a foreign key to another table (the subtype pattern — the child table's PK references the parent's PK).
+**Detects:** an FK whose source columns are a **proper subset** of the PK, where the remaining PK columns
+contain at least one **genuine discriminator** (a PK column that is not itself any FK column).
 
-**Current behaviour:** generates a regular one-to-many relationship.
+**Produces:** the entity is marked `weak`; the owning FK becomes a `weak relationship`; the discriminator
+column(s) get the `partial_key` modifier (the borrowed FK columns stay `key`).
 
-**Proposed behaviour:** generate an `extends` clause on the child entity instead of a relationship, representing ISA / specialisation in the ER model.
+```sql
+CREATE TABLE Room (
+    building_id INT NOT NULL,
+    room_no     INT NOT NULL,
+    capacity    INT,
+    PRIMARY KEY (building_id, room_no),
+    FOREIGN KEY (building_id) REFERENCES Building(id)
+);
+```
+→ `weak entity Room { building_id: INT key; room_no: INT partial_key; capacity: INT optional }` plus
+`weak relationship BuildingRoom { Building [1] -> Room [...] }`.
 
-**Detection:** check whether `fk.sourceColumns` equals `table.primaryKey.columns` (same set, same table) and `fk.referencedColumns` equals the PK of the referenced table.
+**Cannot do / caveats:**
+- The **discriminator requirement** is what separates a weak entity from a payload-free association class.
+  A table whose PK is composed *entirely* of FK columns is **not** treated as weak (it is a junction, or an
+  association-class entity) — otherwise an FK column would be mislabeled as a partial key.
+- The owning FK must be a *proper* subset of the PK. A full-PK FK is ISA (heuristic 2), not weak.
+- Only **one** owner is inferred (the first qualifying FK). Doubly-weak entities are not modelled.
 
 ---
 
-### Self-referencing relationship
+### 4. Cardinality inference (nullable + UNIQUE)
 
-**Condition:** a FK references the same table it is defined on (e.g. an `Employee` table with a `manager_id` FK back to `Employee`).
+Replaces the previous stub that always emitted `[0..N]`. Applied to every ordinary FK; the referenced
+(left/parent) side is always `1`. The FK-bearing (right/child) side is:
 
-**Current behaviour:** produces a relationship where both sides name the same entity, which is valid ER but may have a confusing auto-generated name (`EmployeeEmployee`).
+| FK columns | Not a UNIQUE FK (one-to-many) | UNIQUE FK (one-to-one) |
+|---|---|---|
+| all NOT NULL | `1..N` | `1` |
+| any nullable | `0..N` | `0..1` |
 
-**Proposed behaviour:** generate a more descriptive relationship name using the FK source column name as a hint (e.g. `EmployeeManager`), and optionally flag it as a recursive relationship.
+- **Nullable** is checked per source column against `ownerTable.columns`.
+- **UNIQUE** means a single source column flagged `isUnique`, or source columns matching a
+  `uniqueConstraint`'s column list exactly.
 
-**Detection:** `fk.referencedTable.toLowerCase() === ownerTable.name.toLowerCase()`.
+**Cannot do / caveats:**
+- This is a **structural approximation**, not a true min/max participation analysis. The `1..N` / `0..N`
+  distinction encodes child-side mandatoriness from NOT NULL only; it does not (and cannot from DDL)
+  guarantee a parent actually has children.
+- The parent side is always `1`; partial participation of the parent is not inferred.
+- A UNIQUE constraint that only *partially* overlaps the FK columns is not treated as one-to-one.
+
+---
+
+### 5. Self-referencing relationship naming
+
+**Detects:** a single-column FK pointing back at its own table.
+
+**Produces:** a role-based name derived from the FK column (trailing `id`/`_id` stripped, PascalCased)
+instead of the doubled default — e.g. `Employee.manager_id → Employee` becomes `EmployeeManager` rather
+than `EmployeeEmployee`. Cardinality is still inferred by heuristic 4.
+
+**Cannot do / caveats:**
+- **Composite** self-referencing FKs fall back to the default `{Entity}{Entity}` name.
+- If the column name strips to nothing useful (e.g. literally `id`), the default name is used.
+- It only renames; it does not add an explicit relationship `role` label or a recursive flag.
+
+---
+
+### Precedence
+
+A table matches **at most one** structural classification, evaluated in this order (first match wins):
+
+1. **Junction** (→ M2M relationship, no entity)
+2. **ISA** (→ `extends`, identifying FK suppressed)
+3. **Weak entity** (→ `weak` entity + `weak relationship` + `partial_key`)
+4. **Plain entity** (→ ordinary relationships with cardinality inference + self-ref naming)
+
+This ordering matters because the shapes overlap: a junction's FKs are each a subset of its PK (which would
+otherwise look weak), and a weak entity's owner FK is a subset of the PK (which a payload-free table could
+confuse with a junction). Classifying once, in this order, makes the outcome deterministic.
+
+### Global limitations (what the heuristics *cannot* do)
+
+- **DDL only — no data sampling.** Every inference comes from the `CREATE TABLE` text. Actual row
+  distributions, real cardinalities, and orphan rates are never consulted.
+- **No semantic understanding.** Naming heuristics are lexical (suffix stripping, PascalCase). They do not
+  understand domain meaning; `created_by` and `manager_id` are treated structurally alike.
+- **Cross-schema / external references** to tables not present in the parsed input are dropped, not stubbed.
+- **Parser limits propagate.** Anything the Phase-1 parser cannot extract for a given dialect (e.g. FKs in
+  T-SQL/BigQuery, see the dialect notes above) is simply absent here — the analyzer cannot infer what it
+  never received.
+- **One classification per table.** Genuinely hybrid tables (e.g. a weak *and* junction-like table) are
+  forced into a single bucket by the precedence rules above.
+- These are **heuristics, not guarantees.** They aim for a sensible default ER model that a human can refine,
+  not a provably correct schema reconstruction.

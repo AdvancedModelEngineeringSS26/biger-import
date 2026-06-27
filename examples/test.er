@@ -2,12 +2,12 @@ erdiagram ImportedFromSql
 notation = uml
 
 entity Authors {
-    id: INT
+    id: INT key
     name: VARCHAR(255)
 }
 
 entity Books {
-    id: INT
+    id: INT key
     author_id: INT
     title: VARCHAR(255)
 }

@@ -187,7 +187,7 @@ describe('analyzeSchema – relationships', () => {
         expect(rel.leftCardinality).toBe('1');
     });
 
-    it('sets rightCardinality to 0..N', () => {
+    it('sets rightCardinality to 1..N for a NOT NULL FK', () => {
         const model = makeModel([
             makeTable({ name: 'authors' }),
             makeTable({
@@ -197,7 +197,7 @@ describe('analyzeSchema – relationships', () => {
             }),
         ]);
         const [rel] = analyzeSchema(model).relationships;
-        expect(rel.rightCardinality).toBe('0..N');
+        expect(rel.rightCardinality).toBe('1..N');
     });
 
     it('names the relationship as leftEntity + rightEntity', () => {
@@ -250,5 +250,244 @@ describe('analyzeSchema – edge cases', () => {
         const result = analyzeSchema(makeModel([]));
         expect(result.entities).toHaveLength(0);
         expect(result.relationships).toHaveLength(0);
+    });
+});
+
+// ── Cardinality inference (nullable + UNIQUE) ───────────────────────────────
+
+describe('analyzeSchema – cardinality inference', () => {
+    function modelWithFk(column: Partial<SchemaColumn> & { name: string }, tableOverrides: Partial<SchemaTable> = {}) {
+        return makeModel([
+            makeTable({ name: 'parents' }),
+            makeTable({
+                name: 'children',
+                columns: [makeColumn(column)],
+                foreignKeys: [{ sourceColumns: [column.name], referencedTable: 'parents', referencedColumns: ['id'] }],
+                ...tableOverrides,
+            }),
+        ]);
+    }
+
+    it('NOT NULL FK → right side 1..N (one-to-many, mandatory)', () => {
+        const [rel] = analyzeSchema(modelWithFk({ name: 'parent_id', nullable: false })).relationships;
+        expect(rel.rightCardinality).toBe('1..N');
+    });
+
+    it('nullable FK → right side 0..N (one-to-many, optional)', () => {
+        const [rel] = analyzeSchema(modelWithFk({ name: 'parent_id', nullable: true })).relationships;
+        expect(rel.rightCardinality).toBe('0..N');
+    });
+
+    it('NOT NULL FK on a UNIQUE column → right side 1 (one-to-one, mandatory)', () => {
+        const [rel] = analyzeSchema(modelWithFk({ name: 'parent_id', nullable: false, isUnique: true })).relationships;
+        expect(rel.rightCardinality).toBe('1');
+    });
+
+    it('nullable FK on a UNIQUE column → right side 0..1 (one-to-one, optional)', () => {
+        const [rel] = analyzeSchema(modelWithFk({ name: 'parent_id', nullable: true, isUnique: true })).relationships;
+        expect(rel.rightCardinality).toBe('0..1');
+    });
+
+    it('FK matching a UNIQUE constraint → one-to-one', () => {
+        const model = modelWithFk(
+            { name: 'parent_id', nullable: false },
+            { uniqueConstraints: [{ columns: ['parent_id'] }] }
+        );
+        const [rel] = analyzeSchema(model).relationships;
+        expect(rel.rightCardinality).toBe('1');
+    });
+
+    it('always sets leftCardinality to 1', () => {
+        const [rel] = analyzeSchema(modelWithFk({ name: 'parent_id', nullable: true })).relationships;
+        expect(rel.leftCardinality).toBe('1');
+    });
+});
+
+// ── Junction table → many-to-many ───────────────────────────────────────────
+
+describe('analyzeSchema – junction table → M2M', () => {
+    function junctionModel(extraColumns: SchemaColumn[] = []) {
+        return makeModel([
+            makeTable({ name: 'orders' }),
+            makeTable({ name: 'products' }),
+            makeTable({
+                name: 'order_items',
+                columns: [
+                    makeColumn({ name: 'order_id' }),
+                    makeColumn({ name: 'product_id' }),
+                    ...extraColumns,
+                ],
+                primaryKey: { columns: ['order_id', 'product_id'] },
+                foreignKeys: [
+                    { sourceColumns: ['order_id'], referencedTable: 'orders', referencedColumns: ['id'] },
+                    { sourceColumns: ['product_id'], referencedTable: 'products', referencedColumns: ['id'] },
+                ],
+            }),
+        ]);
+    }
+
+    it('does not emit an entity for a pure junction table', () => {
+        const { entities } = analyzeSchema(junctionModel());
+        expect(entities.map(e => e.name)).toEqual(['Orders', 'Products']);
+    });
+
+    it('emits a single M2M relationship with 0..N on both sides', () => {
+        const { relationships } = analyzeSchema(junctionModel());
+        expect(relationships).toHaveLength(1);
+        const [rel] = relationships;
+        expect(rel.leftEntity).toBe('Orders');
+        expect(rel.rightEntity).toBe('Products');
+        expect(rel.leftCardinality).toBe('0..N');
+        expect(rel.rightCardinality).toBe('0..N');
+    });
+
+    it('keeps a junction with a payload column as a normal entity (association class)', () => {
+        const { entities, relationships } = analyzeSchema(junctionModel([makeColumn({ name: 'quantity' })]));
+        expect(entities.map(e => e.name)).toContain('OrderItems');
+        // payload junction yields two ordinary relationships, not one M2M
+        expect(relationships).toHaveLength(2);
+    });
+});
+
+// ── Inheritance / ISA (PK = FK) ──────────────────────────────────────────────
+
+describe('analyzeSchema – ISA / extends', () => {
+    function isaModel() {
+        return makeModel([
+            makeTable({
+                name: 'employee',
+                columns: [makeColumn({ name: 'id', isPrimaryKey: true })],
+                primaryKey: { columns: ['id'] },
+            }),
+            makeTable({
+                name: 'manager',
+                columns: [makeColumn({ name: 'id', isPrimaryKey: true })],
+                primaryKey: { columns: ['id'] },
+                foreignKeys: [{ sourceColumns: ['id'], referencedTable: 'employee', referencedColumns: ['id'] }],
+            }),
+        ]);
+    }
+
+    it('sets extends on the child entity to the parent entity', () => {
+        const { entities } = analyzeSchema(isaModel());
+        const manager = entities.find(e => e.name === 'Manager');
+        expect(manager?.extends).toBe('Employee');
+    });
+
+    it('does not generate a relationship for the identifying FK', () => {
+        const { relationships } = analyzeSchema(isaModel());
+        expect(relationships).toHaveLength(0);
+    });
+
+    it('does not treat a self-referencing PK=FK as ISA', () => {
+        const model = makeModel([
+            makeTable({
+                name: 'node',
+                columns: [makeColumn({ name: 'id', isPrimaryKey: true })],
+                primaryKey: { columns: ['id'] },
+                foreignKeys: [{ sourceColumns: ['id'], referencedTable: 'node', referencedColumns: ['id'] }],
+            }),
+        ]);
+        const { entities } = analyzeSchema(model);
+        expect(entities[0].extends).toBeUndefined();
+    });
+});
+
+// ── Weak entities ────────────────────────────────────────────────────────────
+
+describe('analyzeSchema – weak entities', () => {
+    function weakModel() {
+        return makeModel([
+            makeTable({ name: 'building' }),
+            makeTable({
+                name: 'room',
+                columns: [
+                    makeColumn({ name: 'building_id' }),
+                    makeColumn({ name: 'room_no' }),
+                    makeColumn({ name: 'capacity', nullable: true }),
+                ],
+                primaryKey: { columns: ['building_id', 'room_no'] },
+                foreignKeys: [{ sourceColumns: ['building_id'], referencedTable: 'building', referencedColumns: ['id'] }],
+            }),
+        ]);
+    }
+
+    it('marks the entity as weak', () => {
+        const room = analyzeSchema(weakModel()).entities.find(e => e.name === 'Room');
+        expect(room?.weak).toBe(true);
+    });
+
+    it('marks the discriminator column as partial_key and the borrowed key as key', () => {
+        const room = analyzeSchema(weakModel()).entities.find(e => e.name === 'Room')!;
+        const byName = Object.fromEntries(room.attributes.map(a => [a.name, a.modifier]));
+        expect(byName['building_id']).toBe('key');
+        expect(byName['room_no']).toBe('partial_key');
+    });
+
+    it('marks the identifying relationship as weak', () => {
+        const [rel] = analyzeSchema(weakModel()).relationships;
+        expect(rel.weak).toBe(true);
+        expect(rel.leftEntity).toBe('Building');
+        expect(rel.rightEntity).toBe('Room');
+    });
+
+    it('does not treat a table whose PK is entirely FK columns as weak', () => {
+        // order_items below is a junction (precedence), never a weak entity
+        const model = makeModel([
+            makeTable({ name: 'orders' }),
+            makeTable({ name: 'products' }),
+            makeTable({
+                name: 'order_items',
+                columns: [makeColumn({ name: 'order_id' }), makeColumn({ name: 'product_id' })],
+                primaryKey: { columns: ['order_id', 'product_id'] },
+                foreignKeys: [
+                    { sourceColumns: ['order_id'], referencedTable: 'orders', referencedColumns: ['id'] },
+                    { sourceColumns: ['product_id'], referencedTable: 'products', referencedColumns: ['id'] },
+                ],
+            }),
+        ]);
+        const orderItems = analyzeSchema(model).entities.find(e => e.name === 'OrderItems');
+        expect(orderItems).toBeUndefined();
+    });
+});
+
+// ── Self-referencing relationship naming ─────────────────────────────────────
+
+describe('analyzeSchema – self-referencing relationships', () => {
+    it('derives a role-based name from the FK column (manager_id → EmployeeManager)', () => {
+        const model = makeModel([
+            makeTable({
+                name: 'employee',
+                columns: [makeColumn({ name: 'id', isPrimaryKey: true }), makeColumn({ name: 'manager_id', nullable: true })],
+                primaryKey: { columns: ['id'] },
+                foreignKeys: [{ sourceColumns: ['manager_id'], referencedTable: 'employee', referencedColumns: ['id'] }],
+            }),
+        ]);
+        const [rel] = analyzeSchema(model).relationships;
+        expect(rel.name).toBe('EmployeeManager');
+        expect(rel.leftEntity).toBe('Employee');
+        expect(rel.rightEntity).toBe('Employee');
+    });
+
+    it('falls back to the default name for a composite self-referencing FK', () => {
+        const model = makeModel([
+            makeTable({
+                name: 'employee',
+                columns: [
+                    makeColumn({ name: 'company_id' }),
+                    makeColumn({ name: 'emp_no' }),
+                    makeColumn({ name: 'mgr_company_id', nullable: true }),
+                    makeColumn({ name: 'mgr_emp_no', nullable: true }),
+                ],
+                primaryKey: { columns: ['company_id', 'emp_no'] },
+                foreignKeys: [{
+                    sourceColumns: ['mgr_company_id', 'mgr_emp_no'],
+                    referencedTable: 'employee',
+                    referencedColumns: ['company_id', 'emp_no'],
+                }],
+            }),
+        ]);
+        const [rel] = analyzeSchema(model).relationships;
+        expect(rel.name).toBe('EmployeeEmployee');
     });
 });

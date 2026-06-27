@@ -118,10 +118,19 @@ describe('pipeline – relationships', () => {
         expect(output).toContain('Customers [1]');
     });
 
-    it('sets right side to the owning entity with cardinality [0..N]', () => {
+    it('sets right side to the owning entity with cardinality [1..N] for a non-null FK', () => {
         const sql = `
             CREATE TABLE customers (id INT PRIMARY KEY);
             CREATE TABLE orders (id INT, customer_id INT, FOREIGN KEY (customer_id) REFERENCES customers(id));
+        `;
+        const output = runPipeline(sql);
+        expect(output).toContain('Orders [1..N]');
+    });
+
+    it('sets right side to [0..N] for a nullable FK', () => {
+        const sql = `
+            CREATE TABLE customers (id INT PRIMARY KEY);
+            CREATE TABLE orders (id INT, customer_id INT NULL, FOREIGN KEY (customer_id) REFERENCES customers(id));
         `;
         const output = runPipeline(sql);
         expect(output).toContain('Orders [0..N]');
@@ -226,6 +235,77 @@ describe('pipeline – realistic blog schema', () => {
         );
         const firstRelPos = output.indexOf('relationship');
         expect(lastEntityPos).toBeLessThan(firstRelPos);
+    });
+});
+
+// ── Junction table → M2M ─────────────────────────────────────────────────────
+
+describe('pipeline – junction table → many-to-many', () => {
+    const SQL = `
+        CREATE TABLE orders (id INT PRIMARY KEY);
+        CREATE TABLE products (id INT PRIMARY KEY);
+        CREATE TABLE order_items (
+            order_id INT NOT NULL,
+            product_id INT NOT NULL,
+            PRIMARY KEY (order_id, product_id),
+            FOREIGN KEY (order_id) REFERENCES orders(id),
+            FOREIGN KEY (product_id) REFERENCES products(id)
+        );
+    `;
+
+    it('does not emit an entity for the junction table', () => {
+        const output = runPipeline(SQL);
+        expect(output).not.toContain('entity OrderItems');
+    });
+
+    it('emits a single M2M relationship with [0..N] on both sides', () => {
+        const output = runPipeline(SQL);
+        const relCount = (output.match(/^relationship /mg) ?? []).length;
+        expect(relCount).toBe(1);
+        expect(output).toContain('Orders [0..N] -> Products [0..N]');
+    });
+});
+
+// ── Inheritance / ISA ────────────────────────────────────────────────────────
+
+describe('pipeline – ISA / extends', () => {
+    const SQL = `
+        CREATE TABLE employee (id INT PRIMARY KEY, name VARCHAR(100) NOT NULL);
+        CREATE TABLE manager (
+            id INT NOT NULL,
+            bonus INT,
+            PRIMARY KEY (id),
+            FOREIGN KEY (id) REFERENCES employee(id)
+        );
+    `;
+
+    it('emits an extends clause on the child entity', () => {
+        const output = runPipeline(SQL);
+        expect(output).toContain('entity Manager extends Employee {');
+    });
+
+    it('does not emit a relationship for the identifying FK', () => {
+        const output = runPipeline(SQL);
+        expect(output).not.toContain('relationship');
+    });
+});
+
+// ── Self-referencing relationship ────────────────────────────────────────────
+
+describe('pipeline – self-referencing relationship', () => {
+    const SQL = `
+        CREATE TABLE employee (
+            id INT NOT NULL,
+            manager_id INT NULL,
+            PRIMARY KEY (id),
+            FOREIGN KEY (manager_id) REFERENCES employee(id)
+        );
+    `;
+
+    it('derives a role-based relationship name from the FK column', () => {
+        const output = runPipeline(SQL);
+        expect(output).toContain('relationship EmployeeManager {');
+        expect(output).not.toContain('relationship EmployeeEmployee');
     });
 });
 

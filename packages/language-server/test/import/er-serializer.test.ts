@@ -91,6 +91,29 @@ describe('serializeErModel – entity serialization', () => {
         expect(output).toContain('    name: VARCHAR(255)');
         expect(output).toContain('    price: DECIMAL(10, 2)');
     });
+
+    it('serializes an attribute with a partial_key modifier', () => {
+        const output = serializeErModel(makeModel([{
+            name: 'Room',
+            attributes: [{ name: 'room_no', dataType: 'INT', modifier: 'partial_key' }],
+        }]));
+        expect(output).toContain('    room_no: INT partial_key');
+    });
+
+    it('prefixes a weak entity with the weak keyword', () => {
+        const output = serializeErModel(makeModel([{ name: 'Room', attributes: [], weak: true }]));
+        expect(output).toContain('weak entity Room {');
+    });
+
+    it('serializes an extends clause for an ISA child entity', () => {
+        const output = serializeErModel(makeModel([{ name: 'Manager', attributes: [], extends: 'Employee' }]));
+        expect(output).toContain('entity Manager extends Employee {');
+    });
+
+    it('combines weak and extends when both are present', () => {
+        const output = serializeErModel(makeModel([{ name: 'X', attributes: [], weak: true, extends: 'Y' }]));
+        expect(output).toContain('weak entity X extends Y {');
+    });
 });
 
 // ── Relationship serialization ─────────────────────────────────────────────
@@ -118,6 +141,12 @@ describe('serializeErModel – relationship serialization', () => {
         });
         const output = serializeErModel(makeModel([], [rel]));
         expect(output).toContain('->');
+    });
+
+    it('prefixes a weak (identifying) relationship with the weak keyword', () => {
+        const rel = makeRelationship({ name: 'BuildingRoom', leftEntity: 'Building', rightEntity: 'Room', weak: true });
+        const output = serializeErModel(makeModel([], [rel]));
+        expect(output).toContain('weak relationship BuildingRoom {');
     });
 });
 

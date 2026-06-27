@@ -15,7 +15,9 @@ export function serializeErModel(model: ErModel): string {
 }
 
 function serializeEntity(entity: ErEntity): string[] {
-    const lines = [`entity ${entity.name} {`];
+    const weak = entity.weak ? 'weak ' : '';
+    const extendsClause = entity.extends ? ` extends ${entity.extends}` : '';
+    const lines = [`${weak}entity ${entity.name}${extendsClause} {`];
     for (const attr of entity.attributes) {
         const dataType = attr.dataType ? `: ${attr.dataType}` : '';
         const modifier = attr.modifier ? ` ${attr.modifier}` : '';
@@ -26,8 +28,9 @@ function serializeEntity(entity: ErEntity): string[] {
 }
 
 function serializeRelationship(rel: ErRelationship): string[] {
+    const weak = rel.weak ? 'weak ' : '';
     return [
-        `relationship ${rel.name} {`,
+        `${weak}relationship ${rel.name} {`,
         `    ${rel.leftEntity} [${rel.leftCardinality}] ${rel.kind} ${rel.rightEntity} [${rel.rightCardinality}]`,
         '}',
         '',
