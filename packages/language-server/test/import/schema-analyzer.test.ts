@@ -301,6 +301,26 @@ describe('analyzeSchema – cardinality inference', () => {
         const [rel] = analyzeSchema(modelWithFk({ name: 'parent_id', nullable: true })).relationships;
         expect(rel.leftCardinality).toBe('1');
     });
+
+    it('composite FK with one nullable source column → right side 0..N (not 1..N)', () => {
+        const model = makeModel([
+            makeTable({ name: 'parents' }),
+            makeTable({
+                name: 'children',
+                columns: [
+                    makeColumn({ name: 'parent_a', nullable: false }),
+                    makeColumn({ name: 'parent_b', nullable: true }),
+                ],
+                foreignKeys: [{
+                    sourceColumns: ['parent_a', 'parent_b'],
+                    referencedTable: 'parents',
+                    referencedColumns: ['a', 'b'],
+                }],
+            }),
+        ]);
+        const [rel] = analyzeSchema(model).relationships;
+        expect(rel.rightCardinality).toBe('0..N');
+    });
 });
 
 // ── Junction table → many-to-many ───────────────────────────────────────────
@@ -347,6 +367,50 @@ describe('analyzeSchema – junction table → M2M', () => {
         // payload junction yields two ordinary relationships, not one M2M
         expect(relationships).toHaveLength(2);
     });
+
+    it('keeps a two-FK table with a surrogate PK as a normal entity (PK does not cover the FK columns)', () => {
+        const model = makeModel([
+            makeTable({ name: 'students' }),
+            makeTable({ name: 'courses' }),
+            makeTable({
+                name: 'enrollment',
+                columns: [
+                    makeColumn({ name: 'id', isPrimaryKey: true }),
+                    makeColumn({ name: 'student_id' }),
+                    makeColumn({ name: 'course_id' }),
+                ],
+                primaryKey: { columns: ['id'] },
+                foreignKeys: [
+                    { sourceColumns: ['student_id'], referencedTable: 'students', referencedColumns: ['id'] },
+                    { sourceColumns: ['course_id'], referencedTable: 'courses', referencedColumns: ['id'] },
+                ],
+            }),
+        ]);
+        const { entities, relationships } = analyzeSchema(model);
+        expect(entities.map(e => e.name)).toContain('Enrollment');
+        expect(relationships).toHaveLength(2);
+    });
+
+    it('does not treat the table as a junction when one referenced table is absent', () => {
+        // products is missing from the schema, so order_items cannot become an M2M relationship
+        const model = makeModel([
+            makeTable({ name: 'orders' }),
+            makeTable({
+                name: 'order_items',
+                columns: [makeColumn({ name: 'order_id' }), makeColumn({ name: 'product_id' })],
+                primaryKey: { columns: ['order_id', 'product_id'] },
+                foreignKeys: [
+                    { sourceColumns: ['order_id'], referencedTable: 'orders', referencedColumns: ['id'] },
+                    { sourceColumns: ['product_id'], referencedTable: 'products', referencedColumns: ['id'] },
+                ],
+            }),
+        ]);
+        const { entities, relationships } = analyzeSchema(model);
+        expect(entities.map(e => e.name)).toContain('OrderItems');
+        // only the resolvable FK (→ orders) yields a relationship
+        expect(relationships).toHaveLength(1);
+        expect(relationships[0].leftEntity).toBe('Orders');
+    });
 });
 
 // ── Inheritance / ISA (PK = FK) ──────────────────────────────────────────────
@@ -390,6 +454,28 @@ describe('analyzeSchema – ISA / extends', () => {
         ]);
         const { entities } = analyzeSchema(model);
         expect(entities[0].extends).toBeUndefined();
+    });
+
+    it('uses only the first qualifying FK for extends; additional PK=FK becomes a relationship', () => {
+        // c.id is a FK to both a and b; only the first becomes `extends`, the second a relationship
+        const model = makeModel([
+            makeTable({ name: 'a', columns: [makeColumn({ name: 'id', isPrimaryKey: true })], primaryKey: { columns: ['id'] } }),
+            makeTable({ name: 'b', columns: [makeColumn({ name: 'id', isPrimaryKey: true })], primaryKey: { columns: ['id'] } }),
+            makeTable({
+                name: 'c',
+                columns: [makeColumn({ name: 'id', isPrimaryKey: true })],
+                primaryKey: { columns: ['id'] },
+                foreignKeys: [
+                    { sourceColumns: ['id'], referencedTable: 'a', referencedColumns: ['id'] },
+                    { sourceColumns: ['id'], referencedTable: 'b', referencedColumns: ['id'] },
+                ],
+            }),
+        ]);
+        const { entities, relationships } = analyzeSchema(model);
+        expect(entities.find(e => e.name === 'C')?.extends).toBe('A');
+        expect(relationships).toHaveLength(1);
+        expect(relationships[0].leftEntity).toBe('B');
+        expect(relationships[0].rightEntity).toBe('C');
     });
 });
 
@@ -448,6 +534,31 @@ describe('analyzeSchema – weak entities', () => {
         ]);
         const orderItems = analyzeSchema(model).entities.find(e => e.name === 'OrderItems');
         expect(orderItems).toBeUndefined();
+    });
+
+    it('does not treat a composite PK made entirely of FK columns (no discriminator) as weak', () => {
+        // three single-column FKs covering the whole PK: not a junction (≠2 FKs) and not weak (no discriminator)
+        const model = makeModel([
+            makeTable({ name: 'x' }),
+            makeTable({ name: 'y' }),
+            makeTable({ name: 'z' }),
+            makeTable({
+                name: 'triple',
+                columns: [makeColumn({ name: 'x_id' }), makeColumn({ name: 'y_id' }), makeColumn({ name: 'z_id' })],
+                primaryKey: { columns: ['x_id', 'y_id', 'z_id'] },
+                foreignKeys: [
+                    { sourceColumns: ['x_id'], referencedTable: 'x', referencedColumns: ['id'] },
+                    { sourceColumns: ['y_id'], referencedTable: 'y', referencedColumns: ['id'] },
+                    { sourceColumns: ['z_id'], referencedTable: 'z', referencedColumns: ['id'] },
+                ],
+            }),
+        ]);
+        const { entities, relationships } = analyzeSchema(model);
+        const triple = entities.find(e => e.name === 'Triple');
+        expect(triple).toBeDefined();
+        expect(triple?.weak).toBeUndefined();
+        expect(relationships).toHaveLength(3);
+        expect(relationships.every(r => r.weak === undefined)).toBe(true);
     });
 });
 
