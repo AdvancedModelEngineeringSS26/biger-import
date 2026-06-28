@@ -9,15 +9,14 @@ import type {
     ErCardinality,
 } from './er-model.js';
 
-/**
- * Converts a parsed SQL {@link SchemaModel} into an {@link ErModel} by applying a set of
- * structural heuristics. Each table is classified exactly once (see {@link classifyTable});
- * the classification then drives both entity generation and relationship generation so the
- * two stages always agree.
- *
- * The heuristics — and, importantly, their limitations — are documented in `docs/sql-import.md`
- * under "Implemented Heuristics".
+/*
+ Converts a parsed SQL {@link SchemaModel} into an {@link ErModel} by applying a set of
+ structural heuristics. Each table is classified exactly once (see {@link classifyTable});
+ the classification then drives both entity generation and relationship generation so the
+ two stages always agree.
  */
+
+
 export function analyzeSchema(schema: SchemaModel): ErModel {
     const entityNameByRawTable = new Map<string, string>();
     for (const table of schema.tables) {
@@ -40,13 +39,12 @@ export function analyzeSchema(schema: SchemaModel): ErModel {
     return { entities, relationships };
 }
 
-// ---------------------------------------------------------------------------
 // Table classification (heuristic detection)
-// ---------------------------------------------------------------------------
 
-/**
- * The outcome of classifying a single table. At most one of the fields is set; an empty object
- * means the table is a plain entity whose foreign keys become ordinary relationships.
+
+/*
+  The outcome of classifying a single table. At most one of the fields is set; an empty object
+  means the table is a plain entity whose foreign keys become ordinary relationships.
  */
 interface TableClassification {
     /** Pure bridge table: becomes a single many-to-many relationship instead of an entity. */
@@ -81,11 +79,11 @@ function classifyTable(
     return {};
 }
 
-/**
- * Junction / bridge table: exactly two FKs, a composite PK, and *every* column is part of an FK
- * (no payload columns). Such a table models a many-to-many association and should not appear as an
- * entity. A junction carrying extra columns (an "association class") fails the all-columns check
- * and is kept as a normal entity instead.
+/*
+ Junction / bridge table: exactly two FKs, a composite PK, and every column is part of an FK
+ (no payload columns). Such a table models a many-to-many association and should not appear as an
+ entity. A junction carrying extra columns (an "association class") fails the all-columns check
+ and is kept as a normal entity instead.
  */
 function detectJunction(
     table: SchemaTable,
@@ -114,11 +112,11 @@ function detectJunction(
     return { fkA, fkB };
 }
 
-/**
- * ISA / inheritance: the table's entire primary key equals one FK's source columns, so the child's
- * identity *is* the parent's identity (the subtype pattern). Self-references are excluded — a table
- * cannot extend itself. Only the first qualifying FK is used; additional FKs fall through to normal
- * relationship generation (multiple inheritance is not modelled).
+/*
+ ISA / inheritance: the table's entire primary key equals one FK's source columns, so the child's
+ identity *is* the parent's identity (the subtype pattern). Self-references are excluded — a table
+ cannot extend itself. Only the first qualifying FK is used; additional FKs fall through to normal
+ relationship generation (multiple inheritance is not modelled).
  */
 function detectIsa(
     table: SchemaTable,
@@ -142,14 +140,14 @@ function detectIsa(
     return undefined;
 }
 
-/**
- * Weak entity: an FK's source columns form a *proper* subset of the PK, and the remaining PK
- * columns include at least one genuine discriminator (a PK column that is not itself part of any
- * FK). That discriminator is the partial key; the owning FK becomes an identifying relationship.
- *
- * The discriminator requirement is what distinguishes a weak entity from an association class such
- * as `OrderItem(order_id, product_id, quantity)` whose PK is made up entirely of FK columns — that
- * stays a normal entity with two relationships.
+/*
+ Weak entity: an FK's source columns form a proper subset of the PK, and the remaining PK
+ columns include at least one genuine discriminator (a PK column that is not itself part of any
+ FK). That discriminator is the partial key; the owning FK becomes an identifying relationship.
+
+ The discriminator requirement is what distinguishes a weak entity from an association class such
+ as OrderItem(order_id, product_id, quantity) whose PK is made up entirely of FK columns — that
+ stays a normal entity with two relationships.
  */
 function detectWeak(
     table: SchemaTable,
@@ -183,9 +181,8 @@ function detectWeak(
     return undefined;
 }
 
-// ---------------------------------------------------------------------------
 // Entity generation
-// ---------------------------------------------------------------------------
+
 
 function buildEntities(
     tables: SchemaTable[],
@@ -268,9 +265,8 @@ function buildPrimaryKeySet(table: SchemaTable): Set<string> {
     return columns;
 }
 
-// ---------------------------------------------------------------------------
 // Relationship generation
-// ---------------------------------------------------------------------------
+
 
 function buildRelationships(
     tables: SchemaTable[],
@@ -367,14 +363,15 @@ function toErRelationship(
     };
 }
 
-/**
- * Cardinality heuristic for the FK-bearing (right) side:
- * - FK covered by a UNIQUE constraint  → one-to-one: `1` (all NOT NULL) or `0..1` (any nullable)
- * - otherwise                          → one-to-many: `1..N` (all NOT NULL) or `0..N` (any nullable)
- *
- * The referenced (left) side is always `1` — a child row points at exactly one parent. This is a
- * structural approximation from the DDL only; it is not a true min/max participation analysis.
+/*
+ Cardinality heuristic for the FK-bearing (right) side:
+   FK covered by a UNIQUE constraint    one-to-one: `1` (all NOT NULL) or `0..1` (any nullable)
+   otherwise                            one-to-many: `1..N` (all NOT NULL) or `0..N` (any nullable)
+ 
+ The referenced (left) side is always 1 — a child row points at exactly one parent. This is a
+ structural approximation from the DDL only; it is not a true min/max participation analysis.
  */
+
 function resolveCardinality(
     fk: SchemaForeignKey,
     ownerTable: SchemaTable
@@ -392,7 +389,7 @@ function resolveCardinality(
     return { leftCardinality: '1', rightCardinality: allNotNull ? '1..N' : '0..N' };
 }
 
-/** True when the FK source columns are guaranteed unique (single UNIQUE column or a UNIQUE constraint). */
+/* True when the FK source columns are guaranteed unique (single UNIQUE column or a UNIQUE constraint). */
 function isUniqueForeignKey(fk: SchemaForeignKey, ownerTable: SchemaTable): boolean {
     if (fk.sourceColumns.length === 1) {
         const target = fk.sourceColumns[0].toLowerCase();
@@ -405,12 +402,13 @@ function isUniqueForeignKey(fk: SchemaForeignKey, ownerTable: SchemaTable): bool
     return ownerTable.uniqueConstraints.some(uc => setEquals(src, columnSet(uc.columns)));
 }
 
-/**
- * Default relationship name is `{Parent}{Child}`. For a self-referencing FK with a single source
- * column we derive a role from the column name (stripping a trailing `id`/`_id`) so an `Employee`
- * pointing at itself via `manager_id` becomes `EmployeeManager` rather than `EmployeeEmployee`.
- * Composite self-references fall back to the default name.
+/*
+ Default relationship name is `{Parent}{Child}`. For a self-referencing FK with a single source
+ column we derive a role from the column name (stripping a trailing `id`/`_id`) so an `Employee`
+ pointing at itself via `manager_id` becomes `EmployeeManager` rather than `EmployeeEmployee`.
+ Composite self-references fall back to the default name.
  */
+
 function deriveRelationshipBaseName(
     fk: SchemaForeignKey,
     ownerTable: SchemaTable,
@@ -457,9 +455,7 @@ function toIdentifier(value: string | undefined): string | undefined {
     return identifier || undefined;
 }
 
-// ---------------------------------------------------------------------------
-// Small set helpers (case-insensitive column comparison)
-// ---------------------------------------------------------------------------
+// helper functions
 
 function primaryKeyColumnsLower(table: SchemaTable): Set<string> {
     return new Set([...buildPrimaryKeySet(table)].map(col => col.toLowerCase()));
