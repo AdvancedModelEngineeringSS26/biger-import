@@ -28,12 +28,31 @@ The SQL import feature reads a `.sql` file containing `CREATE TABLE` statements 
 
 ## How to Use It
 
-1. Open (or create) a `.er` file in VS Code.
-2. Run the command **ER: Import** from the command palette, the editor context menu, or the editor title bar icon.
-3. Select the SQL dialect of the file you want to import.
-4. Pick the `.sql` file using the file dialog.
+There are two ways to run the import, depending on which file is active. Both use the same command — **ER: Import** — available from the command palette and the editor context menu (and, for `.sql` files, the editor title bar icon).
 
-The contents of the active `.er` file are replaced with the generated diagram. The operation is undoable via standard VS Code undo (`Cmd+Z` / `Ctrl+Z`).
+### From a `.sql` file (recommended)
+
+1. Open a `.sql` file in VS Code.
+2. Run **ER: Import** and select the SQL dialect.
+3. A new `.er` file is created **next to the SQL file, with the same base name** (`schema.sql` → `schema.er`) and opened in the editor.
+
+If a file with that name already exists, a number is appended so nothing is overwritten: `schema.er` → `schema1.er` → `schema2.er`, and so on.
+
+### From a `.er` file
+
+1. Open (or create) a `.er` file in VS Code.
+2. Run **ER: Import** and select the SQL dialect.
+3. Pick the `.sql` file using the file dialog.
+
+The contents of the active `.er` file are **replaced** with the generated diagram.
+
+> Running the command on any other file type shows an error. The command only appears for `.sql` and `.er` files (`editorLangId == 'sql' || editorLangId == 'entity-relationship'`).
+
+### Examples
+
+The [`examples/dialects/`](../examples/dialects/) folder contains nine `.sql` files — one per FK-capable dialect, each written in that dialect's idiomatic style — that all import to the **same** ER model. See [`examples/dialect-demo.md`](../examples/dialect-demo.md) for a walkthrough.
+
+The [`examples/heuristics/`](../examples/heuristics/) folder contains one focused `.sql` file per modeling heuristic (junction, ISA, weak entity, cardinality, self-reference, name collision), plus a `generic.sql` that exercises them all at once — see [Implemented Heuristics](#implemented-heuristics) for the rules.
 
 ---
 
@@ -75,21 +94,16 @@ Fields that the current analyzer does not yet use are still captured so future p
 
 Applies all modeling heuristics to translate SQL concepts into ER concepts. This is the right place to add or change heuristics — the other phases do not contain any.
 
-Current heuristics:
+Every table is classified exactly once (`classifyTable`), and the classification drives both entity and relationship generation. The heuristics range from a baseline column/PK/FK mapping to structural inferences (junction tables, ISA, weak entities, cardinality, self-reference naming).
 
-- **Entity naming** — table names are converted to PascalCase identifiers (`order_item` → `OrderItem`). Non-word characters are replaced with underscores; names starting with a digit are prefixed with `_`.
-- **Primary key unification** — inline `PRIMARY KEY` column modifiers and table-level `CONSTRAINT PRIMARY KEY` declarations are merged into a single set, correctly handling composite PKs.
-- **Attribute modifier** — a column in the PK set gets the `key` modifier; a column with an explicit `NULL` keyword gets `optional`; all other columns (NOT NULL or unspecified) get no modifier.
-- **Relationship cardinality** — every FK produces a `[1] → [0..N]` relationship: `[1]` on the referenced table side, `[0..N]` on the FK-bearing table side. The `resolveCardinality` function is isolated so this heuristic is easy to refine.
-- **Relationship naming** — the base name is `{ReferencedEntity}{OwnerEntity}`; if that name is already taken, `Rel` is appended.
-- **Unresolved FK filtering** — if a FK references a table not present in the input file, the relationship is silently omitted.
+See [Implemented Heuristics](#implemented-heuristics) below for the full rules, examples, caveats, and precedence.
 
 ### Phase 3 — ER Serializer (`er-serializer.ts`)
 
 **Input:** `ErModel`  
 **Output:** `.er` text
 
-Converts the `ErModel` into the bigER textual syntax. Pure string transformation with no logic. The output always starts with:
+Converts the `ErModel` into the bigER textual syntax. Pure string transformation with no logic. It renders the structural markers the analyzer produces — `weak entity`, `entity … extends …`, the `partial_key` attribute modifier, and `weak relationship`. The output always starts with:
 
 ```
 erdiagram ImportedFromSql
@@ -109,7 +123,7 @@ The import uses a custom LSP request so the VS Code extension can delegate the c
 | Parameters | `erDocumentUri`, `sqlDocumentUri`, `sqlContent` (string), `dialect` |
 | Response | `erContent` (string) on success; `error` (string) on failure |
 
-The extension reads the `.sql` file content itself and sends it as a plain string — no file I/O happens inside the language server.
+All file I/O stays on the extension side; the language server is a pure function from `sqlContent` + `dialect` to `erContent`. The extension reads the SQL text, sends it as a plain string, and then either writes the returned `erContent` to a new `.er` file (SQL-first path) or replaces the active document (ER-first path).
 
 ---
 
@@ -125,7 +139,7 @@ SchemaModel
    │                        autoIncrement, defaultValue?, comment?
    ├─ SchemaPrimaryKey?     constraintName?, columns[]
    ├─ SchemaForeignKey[]    constraintName?, sourceColumns[], referencedTable,
-   │                        referencedColumns[], onDelete?, onUpdate?
+   │                        referencedSchema?, referencedColumns[], onDelete?, onUpdate?
    ├─ SchemaUniqueConstraint[]   constraintName?, columns[]
    └─ SchemaCheckConstraint[]    constraintName?
 ```
@@ -134,10 +148,10 @@ SchemaModel
 
 ```
 ErModel
-├─ ErEntity[]          name (PascalCase), ErAttribute[]
-│                          name, dataType?, modifier?
+├─ ErEntity[]          name (PascalCase), weak?, extends?, ErAttribute[]
+│                          name, dataType?, modifier? (key | partial_key | optional)
 └─ ErRelationship[]    name, leftEntity, leftCardinality,
-                       rightEntity, rightCardinality, kind
+                       rightEntity, rightCardinality, kind, weak?
 ```
 
 ---
@@ -153,7 +167,7 @@ ErModel
 | `src/import/er-serializer.ts` | `language-server` | ErModel → .er text |
 | `src/import/sql-import-service.ts` | `language-server` | Pipeline orchestrator |
 | `src/import/import-request-handler.ts` | `language-server` | LSP request registration |
-| `src/import/import-command.ts` | `extension` | VS Code command, dialect picker, file dialog |
+| `src/import/import-command.ts` | `extension` | VS Code command; dialect picker; SQL-first path (creates a new `.er` file beside the SQL file, auto-numbering on name collision) and ER-first path (file dialog + overwrite active document) |
 | `src/import/protocol.ts` | `common` | Shared LSP request/response types |
 
 ---
@@ -193,8 +207,7 @@ Each test file is fully independent — Phase 2 and Phase 3 tests construct thei
 
 Phase 2 (`analyzeSchema` in `schema-analyzer.ts`) turns the raw `SchemaModel` into an `ErModel` by
 applying the structural heuristics below. They are **best-effort inferences from the DDL alone** — see
-[Global limitations](#global-limitations-what-the-heuristics-cannot-do) for what they fundamentally
-cannot do, and [Precedence](#precedence) for how they interact.
+[Global limitations](#global-limitations-what-the-heuristics-cannot-do) for what they fundamentally cannot do, and [Precedence](#precedence) for how they interact.
 
 Every table is classified exactly once (`classifyTable`), and the classification drives both entity and
 relationship generation so the two never disagree (e.g. a junction table is never emitted both as an
@@ -349,8 +362,7 @@ confuse with a junction). Classifying once, in this order, makes the outcome det
 
 ### Global limitations (what the heuristics *cannot* do)
 
-- **DDL only — no data sampling.** Every inference comes from the `CREATE TABLE` text. Actual row
-  distributions, real cardinalities, and orphan rates are never consulted.
+- **DDL only — no data sampling.** Every inference comes from the `CREATE TABLE` text. Actual row distributions, real cardinalities, and orphan rates are never consulted.
 - **No semantic understanding.** Naming heuristics are lexical (suffix stripping, PascalCase). They do not
   understand domain meaning; `created_by` and `manager_id` are treated structurally alike.
 - **Cross-schema / external references** to tables not present in the parsed input are dropped, not stubbed.
