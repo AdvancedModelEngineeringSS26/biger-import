@@ -23,7 +23,7 @@ export class SqlImportService {
             return { erContent: '', error: 'No CREATE TABLE statements found in the SQL file.' };
         }
 
-        const erModel = analyzeSchema(schemaModel);
+        const erModel = analyzeSchema(schemaModel, params.heuristics);
         return { erContent: serializeErModel(erModel) };
     }
 }

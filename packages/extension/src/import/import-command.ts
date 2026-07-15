@@ -1,10 +1,33 @@
-import { IMPORT_SQL_REQUEST, type ImportSqlParams, type ImportSqlResult, type SqlDialect } from '@biger/common';
+import { IMPORT_SQL_REQUEST, type HeuristicSettings, type ImportSqlParams, type ImportSqlResult, type SqlDialect } from '@biger/common';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { LanguageClient } from 'vscode-languageclient/node.js';
 
 const ER_LANGUAGE_ID = 'entity-relationship';
 const SQL_LANGUAGE_ID = 'sql';
+
+type ExistingFileBehavior = 'overwrite' | 'increment';
+
+interface ImportConfig {
+    onExisting: ExistingFileBehavior;
+    heuristics: HeuristicSettings;
+}
+
+// Reads the extension settings under `biger.import`. All heuristics default to enabled,
+// and an existing target .er file is overwritten by default.
+function readImportConfig(): ImportConfig {
+    const cfg = vscode.workspace.getConfiguration('biger.import');
+    return {
+        onExisting: cfg.get<ExistingFileBehavior>('onExistingErFile', 'overwrite'),
+        heuristics: {
+            junction: cfg.get<boolean>('heuristics.junction', true),
+            inheritance: cfg.get<boolean>('heuristics.inheritance', true),
+            weakEntity: cfg.get<boolean>('heuristics.weakEntity', true),
+            cardinality: cfg.get<boolean>('heuristics.cardinality', true),
+            selfReferenceNaming: cfg.get<boolean>('heuristics.selfReferenceNaming', true),
+        },
+    };
+}
 
 const DIALECT_OPTIONS: { label: string; dialect: SqlDialect }[] = [
     { label: 'MySQL',                        dialect: 'MySQL' },
@@ -50,14 +73,16 @@ async function importFromSqlFile(editor: vscode.TextEditor, languageClient: Lang
         return;
     }
 
+    const config = readImportConfig();
     const sqlContent = editor.document.getText();
-    const erUri = await resolveErUri(editor.document.uri.fsPath);
+    const erUri = await resolveErUri(editor.document.uri.fsPath, config.onExisting);
 
     const importParams: ImportSqlParams = {
         erDocumentUri: erUri.toString(),
         sqlDocumentUri: editor.document.uri.toString(),
         sqlContent,
         dialect: selectedDialect.dialect,
+        heuristics: config.heuristics,
     };
 
     const importResult = await languageClient.sendRequest<ImportSqlResult>(IMPORT_SQL_REQUEST, importParams);
@@ -99,6 +124,7 @@ async function importIntoErFile(editor: vscode.TextEditor, languageClient: Langu
         sqlDocumentUri: sqlFileUri.toString(),
         sqlContent,
         dialect: selectedDialect.dialect,
+        heuristics: readImportConfig().heuristics,
     };
 
     const importResult = await languageClient.sendRequest<ImportSqlResult>(IMPORT_SQL_REQUEST, importParams);
@@ -117,13 +143,14 @@ async function pickDialect(): Promise<{ label: string; dialect: SqlDialect } | u
 }
 
 // Returns a URI for a .er file derived from the SQL file path.
-// If <stem>.er already exists, appends a number: <stem>1.er, <stem>2.er, …
-async function resolveErUri(sqlFsPath: string): Promise<vscode.Uri> {
+// 'overwrite' → always <stem>.er (an existing file is replaced).
+// 'increment' → if <stem>.er exists, append a number: <stem>1.er, <stem>2.er, …
+async function resolveErUri(sqlFsPath: string, onExisting: ExistingFileBehavior): Promise<vscode.Uri> {
     const dir = path.dirname(sqlFsPath);
     const stem = path.basename(sqlFsPath, path.extname(sqlFsPath));
 
     const base = vscode.Uri.file(path.join(dir, `${stem}.er`));
-    if (!await fileExists(base)) {
+    if (onExisting === 'overwrite' || !await fileExists(base)) {
         return base;
     }
 

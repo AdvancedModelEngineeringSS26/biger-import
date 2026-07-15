@@ -6,11 +6,21 @@ export type SqlDialect =
     | 'Snowflake' | 'Redshift'
     | 'TransactSQL' | 'BigQuery';
 
+export interface HeuristicSettings {
+    junction: boolean;
+    inheritance: boolean;
+    weakEntity: boolean;
+    cardinality: boolean;
+    selfReferenceNaming: boolean;
+}
+
 export interface ImportSqlParams {
     erDocumentUri: string;
     sqlDocumentUri: string;
     sqlContent: string;
     dialect: SqlDialect;
+    /** Which heuristics to apply. Undefined means all enabled. */
+    heuristics?: HeuristicSettings;
 }
 
 export interface ImportSqlResult {

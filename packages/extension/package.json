@@ -33,6 +33,46 @@
         "Programming Languages"
     ],
     "contributes": {
+        "configuration": {
+            "title": "bigER Import",
+            "properties": {
+                "biger.import.onExistingErFile": {
+                    "type": "string",
+                    "enum": ["overwrite", "increment"],
+                    "enumDescriptions": [
+                        "Overwrite the existing <name>.er file.",
+                        "Keep the existing file and append a number: <name>1.er, <name>2.er, …"
+                    ],
+                    "default": "overwrite",
+                    "markdownDescription": "When importing from a `.sql` file and the target `<name>.er` already exists, whether to overwrite it or create a new numbered file."
+                },
+                "biger.import.heuristics.junction": {
+                    "type": "boolean",
+                    "default": true,
+                    "markdownDescription": "Detect junction tables (2 FKs, composite PK, all-FK columns) and convert them to a many-to-many relationship instead of an entity."
+                },
+                "biger.import.heuristics.inheritance": {
+                    "type": "boolean",
+                    "default": true,
+                    "markdownDescription": "Detect ISA/inheritance (a table whose entire primary key is also a foreign key) and emit an `extends` clause instead of a relationship."
+                },
+                "biger.import.heuristics.weakEntity": {
+                    "type": "boolean",
+                    "default": true,
+                    "markdownDescription": "Detect weak entities (a FK that is a proper subset of the PK, plus a discriminator) and emit a `weak` entity with a `partial_key`."
+                },
+                "biger.import.heuristics.cardinality": {
+                    "type": "boolean",
+                    "default": true,
+                    "markdownDescription": "Infer relationship cardinality from nullability and UNIQUE constraints. When disabled, every foreign key becomes `[1] -> [0..N]`."
+                },
+                "biger.import.heuristics.selfReferenceNaming": {
+                    "type": "boolean",
+                    "default": true,
+                    "markdownDescription": "Name self-referencing relationships from the FK column (e.g. `manager_id` → `EmployeeManager`). When disabled, the default `{Entity}{Entity}` name is used."
+                }
+            }
+        },
         "languages": [
             {
                 "id": "entity-relationship",

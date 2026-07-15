@@ -36,7 +36,7 @@ There are two ways to run the import, depending on which file is active. Both us
 2. Run **ER: Import** and select the SQL dialect.
 3. A new `.er` file is created **next to the SQL file, with the same base name** (`schema.sql` → `schema.er`) and opened in the editor.
 
-If a file with that name already exists, a number is appended so nothing is overwritten: `schema.er` → `schema1.er` → `schema2.er`, and so on.
+By default, if `schema.er` already exists it is **overwritten**. Set [`biger.import.onExistingErFile`](#settings) to `increment` to keep the existing file and create a numbered one instead (`schema1.er`, `schema2.er`, …).
 
 ### From a `.er` file
 
@@ -53,6 +53,23 @@ The contents of the active `.er` file are **replaced** with the generated diagra
 The [`examples/dialects/`](../examples/dialects/) folder contains nine `.sql` files — one per FK-capable dialect, each written in that dialect's idiomatic style — that all import to the **same** ER model. See [`examples/dialect-demo.md`](../examples/dialect-demo.md) for a walkthrough.
 
 The [`examples/heuristics/`](../examples/heuristics/) folder contains one focused `.sql` file per modeling heuristic (junction, ISA, weak entity, cardinality, self-reference, name collision), plus a `generic.sql` that exercises them all at once — see [Implemented Heuristics](#implemented-heuristics) for the rules.
+
+---
+
+## Settings
+
+All settings live under `biger.import` (Settings UI → search "bigER Import", or edit `settings.json`).
+
+| Setting | Type | Default | Effect |
+|---|---|---|---|
+| `biger.import.onExistingErFile` | `overwrite` / `increment` | `overwrite` | When importing from a `.sql` file and `<name>.er` already exists: overwrite it, or create a numbered file (`<name>1.er`, …). |
+| `biger.import.heuristics.junction` | boolean | `true` | Junction table (2 FKs, composite PK, all-FK columns) → many-to-many relationship. When off, it stays an entity with two relationships. |
+| `biger.import.heuristics.inheritance` | boolean | `true` | PK = FK → `extends` (ISA). When off, the identifying FK becomes a normal relationship. |
+| `biger.import.heuristics.weakEntity` | boolean | `true` | FK ⊂ PK + discriminator → `weak` entity with a `partial_key`. When off, the entity stays strong. |
+| `biger.import.heuristics.cardinality` | boolean | `true` | Infer cardinality from nullability + UNIQUE. When off, every FK becomes `[1] -> [0..N]`. |
+| `biger.import.heuristics.selfReferenceNaming` | boolean | `true` | Name self-referencing relationships from the FK column (`manager_id` → `EmployeeManager`). When off, the default `{Entity}{Entity}` name is used. |
+
+The heuristic flags are read on the extension side and sent to the language server with each import request; disabling one skips exactly that heuristic in the analyzer. See [Implemented Heuristics](#implemented-heuristics) for what each one does.
 
 ---
 
@@ -212,6 +229,8 @@ applying the structural heuristics below. They are **best-effort inferences from
 Every table is classified exactly once (`classifyTable`), and the classification drives both entity and
 relationship generation so the two never disagree (e.g. a junction table is never emitted both as an
 entity and as a relationship).
+
+Each of the five structural heuristics below (junction, ISA, weak entity, cardinality, self-reference naming) can be turned off individually via the [`biger.import.heuristics.*`](#settings) settings; the baseline mapping always applies.
 
 ### Baseline mapping (always applied)
 

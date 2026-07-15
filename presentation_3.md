@@ -3,7 +3,7 @@ marp: true
 ---
 
 # SQL → ER Converter
-### Final — the complete picture
+### Final presentation
 
 ---
 

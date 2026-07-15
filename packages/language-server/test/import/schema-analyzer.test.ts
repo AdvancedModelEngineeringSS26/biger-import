@@ -602,3 +602,87 @@ describe('analyzeSchema – self-referencing relationships', () => {
         expect(rel.name).toBe('EmployeeEmployee');
     });
 });
+
+// ── Heuristic opt-out (settings) ─────────────────────────────────────────────
+
+describe('analyzeSchema – heuristic opt-out', () => {
+    it('junction: false keeps the junction table as an entity with two relationships', () => {
+        const model = makeModel([
+            makeTable({ name: 'orders' }),
+            makeTable({ name: 'products' }),
+            makeTable({
+                name: 'order_items',
+                columns: [makeColumn({ name: 'order_id' }), makeColumn({ name: 'product_id' })],
+                primaryKey: { columns: ['order_id', 'product_id'] },
+                foreignKeys: [
+                    { sourceColumns: ['order_id'], referencedTable: 'orders', referencedColumns: ['id'] },
+                    { sourceColumns: ['product_id'], referencedTable: 'products', referencedColumns: ['id'] },
+                ],
+            }),
+        ]);
+        const { entities, relationships } = analyzeSchema(model, { junction: false });
+        expect(entities.map(e => e.name)).toContain('OrderItems');
+        expect(relationships).toHaveLength(2);
+    });
+
+    it('inheritance: false turns an ISA FK into a normal relationship (no extends)', () => {
+        const model = makeModel([
+            makeTable({ name: 'employee', columns: [makeColumn({ name: 'id', isPrimaryKey: true })], primaryKey: { columns: ['id'] } }),
+            makeTable({
+                name: 'manager',
+                columns: [makeColumn({ name: 'id', isPrimaryKey: true })],
+                primaryKey: { columns: ['id'] },
+                foreignKeys: [{ sourceColumns: ['id'], referencedTable: 'employee', referencedColumns: ['id'] }],
+            }),
+        ]);
+        const { entities, relationships } = analyzeSchema(model, { inheritance: false });
+        expect(entities.find(e => e.name === 'Manager')?.extends).toBeUndefined();
+        expect(relationships).toHaveLength(1);
+    });
+
+    it('weakEntity: false keeps the entity strong (no weak / partial_key)', () => {
+        const model = makeModel([
+            makeTable({ name: 'building' }),
+            makeTable({
+                name: 'room',
+                columns: [
+                    makeColumn({ name: 'building_id' }),
+                    makeColumn({ name: 'room_no' }),
+                ],
+                primaryKey: { columns: ['building_id', 'room_no'] },
+                foreignKeys: [{ sourceColumns: ['building_id'], referencedTable: 'building', referencedColumns: ['id'] }],
+            }),
+        ]);
+        const { entities, relationships } = analyzeSchema(model, { weakEntity: false });
+        const room = entities.find(e => e.name === 'Room')!;
+        expect(room.weak).toBeUndefined();
+        expect(room.attributes.every(a => a.modifier !== 'partial_key')).toBe(true);
+        expect(relationships[0].weak).toBeUndefined();
+    });
+
+    it('cardinality: false makes a NOT NULL FK 0..N instead of 1..N', () => {
+        const model = makeModel([
+            makeTable({ name: 'authors' }),
+            makeTable({
+                name: 'books',
+                columns: [makeColumn({ name: 'author_id', nullable: false })],
+                foreignKeys: [{ sourceColumns: ['author_id'], referencedTable: 'authors', referencedColumns: ['id'] }],
+            }),
+        ]);
+        const [rel] = analyzeSchema(model, { cardinality: false }).relationships;
+        expect(rel.rightCardinality).toBe('0..N');
+    });
+
+    it('selfReferenceNaming: false falls back to the doubled entity name', () => {
+        const model = makeModel([
+            makeTable({
+                name: 'employee',
+                columns: [makeColumn({ name: 'id', isPrimaryKey: true }), makeColumn({ name: 'manager_id', nullable: true })],
+                primaryKey: { columns: ['id'] },
+                foreignKeys: [{ sourceColumns: ['manager_id'], referencedTable: 'employee', referencedColumns: ['id'] }],
+            }),
+        ]);
+        const [rel] = analyzeSchema(model, { selfReferenceNaming: false }).relationships;
+        expect(rel.name).toBe('EmployeeEmployee');
+    });
+});

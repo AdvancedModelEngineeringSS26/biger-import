@@ -1,4 +1,4 @@
-import { RelationshipType } from '@biger/common';
+import { RelationshipType, type HeuristicSettings } from '@biger/common';
 import type { SchemaModel, SchemaTable, SchemaColumn, SchemaForeignKey } from './schema-model.js';
 import type {
     ErModel,
@@ -17,7 +17,17 @@ import type {
  */
 
 
-export function analyzeSchema(schema: SchemaModel): ErModel {
+const ALL_HEURISTICS: HeuristicSettings = {
+    junction: true,
+    inheritance: true,
+    weakEntity: true,
+    cardinality: true,
+    selfReferenceNaming: true,
+};
+
+export function analyzeSchema(schema: SchemaModel, options?: Partial<HeuristicSettings>): ErModel {
+    const opt: HeuristicSettings = { ...ALL_HEURISTICS, ...options };
+
     const entityNameByRawTable = new Map<string, string>();
     for (const table of schema.tables) {
         const entityName = deriveEntityName(table.name);
@@ -30,11 +40,11 @@ export function analyzeSchema(schema: SchemaModel): ErModel {
     // and is consumed by both buildEntities and buildRelationships.
     const classifications = new Map<string, TableClassification>();
     for (const table of schema.tables) {
-        classifications.set(table.name.toLowerCase(), classifyTable(table, entityNameByRawTable));
+        classifications.set(table.name.toLowerCase(), classifyTable(table, entityNameByRawTable, opt));
     }
 
     const entities = buildEntities(schema.tables, entityNameByRawTable, classifications);
-    const relationships = buildRelationships(schema.tables, entityNameByRawTable, classifications);
+    const relationships = buildRelationships(schema.tables, entityNameByRawTable, classifications, opt);
 
     return { entities, relationships };
 }
@@ -57,23 +67,30 @@ interface TableClassification {
 
 function classifyTable(
     table: SchemaTable,
-    entityNameByRawTable: Map<string, string>
+    entityNameByRawTable: Map<string, string>,
+    opt: HeuristicSettings
 ): TableClassification {
     const pk = primaryKeyColumnsLower(table);
 
-    const junction = detectJunction(table, pk, entityNameByRawTable);
-    if (junction) {
-        return { junction };
+    if (opt.junction) {
+        const junction = detectJunction(table, pk, entityNameByRawTable);
+        if (junction) {
+            return { junction };
+        }
     }
 
-    const isa = detectIsa(table, pk, entityNameByRawTable);
-    if (isa) {
-        return { isa };
+    if (opt.inheritance) {
+        const isa = detectIsa(table, pk, entityNameByRawTable);
+        if (isa) {
+            return { isa };
+        }
     }
 
-    const weak = detectWeak(table, pk, entityNameByRawTable);
-    if (weak) {
-        return { weak };
+    if (opt.weakEntity) {
+        const weak = detectWeak(table, pk, entityNameByRawTable);
+        if (weak) {
+            return { weak };
+        }
     }
 
     return {};
@@ -271,7 +288,8 @@ function buildPrimaryKeySet(table: SchemaTable): Set<string> {
 function buildRelationships(
     tables: SchemaTable[],
     entityNameByRawTable: Map<string, string>,
-    classifications: Map<string, TableClassification>
+    classifications: Map<string, TableClassification>,
+    opt: HeuristicSettings
 ): ErRelationship[] {
     const usedNames = new Set<string>();
     const relationships: ErRelationship[] = [];
@@ -303,7 +321,8 @@ function buildRelationships(
                 rightEntity,
                 entityNameByRawTable,
                 usedNames,
-                Boolean(isWeakOwner)
+                Boolean(isWeakOwner),
+                opt
             );
             if (rel) {
                 relationships.push(rel);
@@ -341,15 +360,16 @@ function toErRelationship(
     rightEntity: string,
     entityNameByRawTable: Map<string, string>,
     usedNames: Set<string>,
-    weak: boolean
+    weak: boolean,
+    opt: HeuristicSettings
 ): ErRelationship | undefined {
     const leftEntity = entityNameByRawTable.get(fk.referencedTable.toLowerCase());
     if (!leftEntity) {
         return undefined;
     }
 
-    const { leftCardinality, rightCardinality } = resolveCardinality(fk, ownerTable);
-    const baseName = deriveRelationshipBaseName(fk, ownerTable, leftEntity, rightEntity);
+    const { leftCardinality, rightCardinality } = resolveCardinality(fk, ownerTable, opt);
+    const baseName = deriveRelationshipBaseName(fk, ownerTable, leftEntity, rightEntity, opt);
     const name = resolveRelationshipName(baseName, usedNames);
 
     return {
@@ -374,8 +394,14 @@ function toErRelationship(
 
 function resolveCardinality(
     fk: SchemaForeignKey,
-    ownerTable: SchemaTable
+    ownerTable: SchemaTable,
+    opt: HeuristicSettings
 ): { leftCardinality: ErCardinality; rightCardinality: ErCardinality } {
+    // Cardinality inference disabled → baseline one-to-many: [1] -> [0..N].
+    if (!opt.cardinality) {
+        return { leftCardinality: '1', rightCardinality: '0..N' };
+    }
+
     const columnsByName = new Map(ownerTable.columns.map(c => [c.name.toLowerCase(), c]));
     const allNotNull = fk.sourceColumns.every(colName => {
         const col = columnsByName.get(colName.toLowerCase());
@@ -413,10 +439,11 @@ function deriveRelationshipBaseName(
     fk: SchemaForeignKey,
     ownerTable: SchemaTable,
     leftEntity: string,
-    rightEntity: string
+    rightEntity: string,
+    opt: HeuristicSettings
 ): string {
     const selfReferencing = fk.referencedTable.toLowerCase() === ownerTable.name.toLowerCase();
-    if (selfReferencing && fk.sourceColumns.length === 1) {
+    if (opt.selfReferenceNaming && selfReferencing && fk.sourceColumns.length === 1) {
         const role = roleFromColumnName(fk.sourceColumns[0]);
         if (role) {
             return `${rightEntity}${role}`;
