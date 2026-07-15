@@ -2,6 +2,8 @@
 
 This document describes the SQL import feature of bigER: what it does, how to use it, and how it is implemented internally.
 
+![SQL import in action](../images/showcase.gif)
+
 ---
 
 ## What It Does
@@ -71,11 +73,25 @@ All settings live under `biger.import` (Settings UI → search "bigER Import", o
 
 The heuristic flags are read on the extension side and sent to the language server with each import request; disabling one skips exactly that heuristic in the analyzer. See [Implemented Heuristics](#implemented-heuristics) for what each one does.
 
+![bigER import settings in VS Code](../images/image-1.png)
+
 ---
 
 ## Pipeline Architecture
 
 The import is implemented as a three-phase pipeline inside the language server:
+
+```mermaid
+flowchart LR
+    SQL["📄 .sql text"] --> P["sql-parser<br/><i>Phase 1</i>"]
+    P --> SM["SchemaModel<br/><i>faithful SQL</i>"]
+    SM --> A["schema-analyzer<br/><i>Phase 2 · heuristics</i>"]
+    A --> EM["ErModel<br/><i>ER concepts</i>"]
+    EM --> S["er-serializer<br/><i>Phase 3</i>"]
+    S --> ER["📄 .er text"]
+```
+
+<sub>(Plain-text fallback if the diagram above doesn't render:)</sub>
 
 ```
 SQL text
@@ -125,6 +141,63 @@ Converts the `ErModel` into the bigER textual syntax. Pure string transformation
 ```
 erdiagram ImportedFromSql
 notation = uml
+```
+
+---
+
+## Example: SQL → ER
+
+A minimal end-to-end run through the pipeline.
+
+**Input** (`schema.sql`):
+
+```sql
+CREATE TABLE customer (
+    id    INT PRIMARY KEY,
+    email VARCHAR(255)
+);
+
+CREATE TABLE orders (
+    id          INT PRIMARY KEY,
+    customer_id INT NOT NULL,
+    FOREIGN KEY (customer_id) REFERENCES customer(id)
+);
+```
+
+**Output** (`schema.er`) — tables become entities, the PK columns get `key`, and the `NOT NULL` foreign key becomes a `[1] -> [1..N]` relationship:
+
+```
+erdiagram ImportedFromSql
+notation = uml
+
+entity Customer {
+    id: INT key
+    email: VARCHAR(255)
+}
+
+entity Orders {
+    id: INT key
+    customer_id: INT
+}
+
+relationship CustomerOrders {
+    Customer [1] -> Orders [1..N]
+}
+```
+
+**Visualized** (the resulting ER model):
+
+```mermaid
+erDiagram
+    Customer ||--|{ Orders : CustomerOrders
+    Customer {
+        INT id PK
+        VARCHAR_255 email
+    }
+    Orders {
+        INT id PK
+        INT customer_id FK
+    }
 ```
 
 ---
@@ -392,3 +465,51 @@ confuse with a junction). Classifying once, in this order, makes the outcome det
   forced into a single bucket by the precedence rules above.
 - These are **heuristics, not guarantees.** They aim for a sensible default ER model that a human can refine,
   not a provably correct schema reconstruction.
+
+---
+
+## Future Work
+
+### Additional / pluggable SQL parser
+
+Phase 1 is currently hardwired to [`node-sql-parser`](https://www.npmjs.com/package/node-sql-parser). Its limitations propagate to the whole pipeline — `FOREIGN KEY` fails in T-SQL and BigQuery, and Flink SQL rejects multi-line statements (see [Supported dialects](#supported-dialects)).
+
+The clean extension point is to abstract Phase 1 behind a small `SqlParser` interface — `(sqlContent, dialect) → SchemaModel` — and select a backend per dialect. Because `SchemaModel` is the boundary, **only Phase 1 changes**; the analyzer and serializer are untouched. Candidate backends:
+
+- **[pgsql-parser](https://github.com/launchql/pgsql-parser)** / **[Supabase pg-parser](https://github.com/supabase-community/pg-parser)** — the real PostgreSQL grammar compiled to WASM; far higher fidelity for PostgreSQL-family DDL.
+- **[sql-ddl-to-json-schema](https://www.npmjs.com/package/sql-ddl-to-json-schema)** — DDL-focused, emits structured JSON directly.
+- **[SQLGlot](https://github.com/tobymao/sqlglot)** — Python, 30+ dialects; usable via a subprocess/service if a wider dialect matrix is needed.
+
+### Richer ER output from already-captured data
+
+`SchemaModel` already captures fields the analyzer does not yet use — `CHECK` constraints, `DEFAULT` values, column comments, `ON DELETE` / `ON UPDATE` actions, and auto-increment. These could surface as annotations or constraints in the ER model without touching Phase 1.
+
+### Data-instance–based inference
+
+All current inference is DDL-only. Sampling actual rows (as in the reverse-engineering literature below) would allow true min/max **cardinality** and participation constraints rather than the structural approximation used today.
+
+---
+
+## Related Work & References
+
+### Similar tools
+
+- [SchemaSpy](https://schemaspy.org/) — Java tool that reverse-engineers a live database into interactive ER diagrams (HTML).
+- [SQLFlow (dpriver)](https://www.dpriver.com/blog/2023/02/convert-sql-into-e-r-diagram-with-sqlflow/) — converts `CREATE` / `ALTER` scripts into ER diagrams.
+- [Visual Paradigm — Database Engineering](https://www.visual-paradigm.com/features/database-engineering-tools/) — reverse-engineers ERDs from `.ddl` / `.sql`.
+- [DiagramDB — SQL to ERD](https://diagramdb.com/sql-to-erd) and [sqltoerdiagram.com](https://sqltoerdiagram.com/) — browser-based `CREATE TABLE` → ERD generators.
+
+### SQL parser libraries
+
+- [node-sql-parser](https://www.npmjs.com/package/node-sql-parser) — the parser this feature uses.
+- [pgsql-parser](https://github.com/launchql/pgsql-parser) · [Supabase pg-parser](https://github.com/supabase-community/pg-parser) — real Postgres grammar (WASM).
+- [sql-ddl-to-json-schema](https://www.npmjs.com/package/sql-ddl-to-json-schema) — DDL → JSON Schema.
+- [SQLGlot](https://github.com/tobymao/sqlglot) — multi-dialect parser/transpiler (Python).
+- [Bytebase — Top Open-Source SQL Parsers](https://www.bytebase.com/blog/top-open-source-sql-parsers/) — comparison overview.
+
+### Articles & academic background
+
+- Chiang, Barron & Storey, *Reverse engineering of relational databases: extraction of an EER model from a relational database* (1994) — [academia.edu](https://www.academia.edu/28153710/Reverse_engineering_of_relational_databases_Extraction_of_an_EER_model_from_a_relational_database).
+- Soutou, *Relational database reverse engineering: algorithms to extract cardinality constraints* (1998) — [ScienceDirect](https://www.sciencedirect.com/science/article/abs/pii/S0169023X98000172).
+- *Reverse Engineering of Relational Database Schema to UML Model* (2020) — [ResearchGate](https://www.researchgate.net/publication/339100796_Reverse_Engineering_of_Relational_Database_Schema_to_UML_Model).
+- [Mermaid — Entity Relationship Diagrams](https://mermaid.js.org/syntax/entityRelationshipDiagram.html) — notation used for the diagrams in this document.
