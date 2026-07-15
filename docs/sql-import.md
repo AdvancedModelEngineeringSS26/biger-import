@@ -1,4 +1,4 @@
-# SQL Import — Feature Documentation
+# SQL Import Feature Documentation
 
 This document describes the SQL import feature of bigER: what it does, how to use it, and how it is implemented internally.
 
@@ -30,7 +30,7 @@ The SQL import feature reads a `.sql` file containing `CREATE TABLE` statements 
 
 ## How to Use It
 
-There are two ways to run the import, depending on which file is active. Both use the same command — **ER: Import** — available from the command palette and the editor context menu (and, for `.sql` files, the editor title bar icon).
+There are two ways to run the import, depending on which file is active. Both use the same command **ER: Import**, which isvailable from the command palette and the editor context menu (and, for `.sql` files, the editor title bar icon).
 
 ### From a `.sql` file (recommended)
 
@@ -52,9 +52,9 @@ The contents of the active `.er` file are **replaced** with the generated diagra
 
 ### Examples
 
-The [`examples/dialects/`](../examples/dialects/) folder contains nine `.sql` files — one per FK-capable dialect, each written in that dialect's idiomatic style — that all import to the **same** ER model. See [`examples/dialect-demo.md`](../examples/dialect-demo.md) for a walkthrough.
+The [`examples/dialects/`](../examples/dialects/) folder contains 9 `.sql` files. One per FK-capable dialect, each written in that dialect's idiomatic style and all are imported to the **same** ER model. See [`examples/dialect-demo.md`](../examples/dialect-demo.md) for a walkthrough.
 
-The [`examples/heuristics/`](../examples/heuristics/) folder contains one focused `.sql` file per modeling heuristic (junction, ISA, weak entity, cardinality, self-reference, name collision), plus a `generic.sql` that exercises them all at once — see [Implemented Heuristics](#implemented-heuristics) for the rules.
+The [`examples/heuristics/`](../examples/heuristics/) folder contains one focused `.sql` file per modeling heuristic (junction, ISA, weak entity, cardinality, self-reference, name collision), plus a `generic.sql` that exercises them all at once. See [Implemented Heuristics](#implemented-heuristics) for the rules.
 
 ---
 
@@ -91,15 +91,6 @@ flowchart LR
     S --> ER["📄 .er text"]
 ```
 
-<sub>(Plain-text fallback if the diagram above doesn't render:)</sub>
-
-```
-SQL text
-  → [sql-parser]      → SchemaModel    (faithful SQL representation)
-  → [schema-analyzer] → ErModel        (ER modeling concepts)
-  → [er-serializer]   → .er text
-```
-
 Each phase is a separate module and can be read, tested, and changed independently.
 
 ### Phase 1 — SQL Parser (`sql-parser.ts`)
@@ -109,7 +100,7 @@ Each phase is a separate module and can be read, tested, and changed independent
 
 Calls `node-sql-parser` to produce an AST, then traverses it into a fully-typed `SchemaModel`. This is the only place in the codebase that touches the raw parser output. All dialect-specific AST quirks (differences in how MySQL and PostgreSQL represent table names, column references, and foreign key structures) are normalised here so downstream phases never have to think about them.
 
-The `SchemaModel` is intentionally comprehensive — it captures everything DDL can express:
+The `SchemaModel` is intentionally comprehensive. It captures everything DDL can express:
 
 - Table name and optional schema prefix
 - Per column: name, data type (with length and scale), nullability, inline PK/UNIQUE flags, auto-increment, default value, comment
@@ -147,7 +138,7 @@ notation = uml
 
 ## Example: SQL → ER
 
-A minimal end-to-end run through the pipeline.
+An end-to-end run through the pipeline.
 
 **Input** (`schema.sql`):
 
@@ -214,35 +205,6 @@ The import uses a custom LSP request so the VS Code extension can delegate the c
 | Response | `erContent` (string) on success; `error` (string) on failure |
 
 All file I/O stays on the extension side; the language server is a pure function from `sqlContent` + `dialect` to `erContent`. The extension reads the SQL text, sends it as a plain string, and then either writes the returned `erContent` to a new `.er` file (SQL-first path) or replaces the active document (ER-first path).
-
----
-
-## Data Models
-
-### `SchemaModel` — SQL layer
-
-```
-SchemaModel
-└─ SchemaTable[]
-   ├─ name, schema?
-   ├─ SchemaColumn[]        name, dataType, nullable, isPrimaryKey, isUnique,
-   │                        autoIncrement, defaultValue?, comment?
-   ├─ SchemaPrimaryKey?     constraintName?, columns[]
-   ├─ SchemaForeignKey[]    constraintName?, sourceColumns[], referencedTable,
-   │                        referencedSchema?, referencedColumns[], onDelete?, onUpdate?
-   ├─ SchemaUniqueConstraint[]   constraintName?, columns[]
-   └─ SchemaCheckConstraint[]    constraintName?
-```
-
-### `ErModel` — ER layer
-
-```
-ErModel
-├─ ErEntity[]          name (PascalCase), weak?, extends?, ErAttribute[]
-│                          name, dataType?, modifier? (key | partial_key | optional)
-└─ ErRelationship[]    name, leftEntity, leftCardinality,
-                       rightEntity, rightCardinality, kind, weak?
-```
 
 ---
 
@@ -472,17 +434,17 @@ confuse with a junction). Classifying once, in this order, makes the outcome det
 
 ### Additional / pluggable SQL parser
 
-Phase 1 is currently hardwired to [`node-sql-parser`](https://www.npmjs.com/package/node-sql-parser). Its limitations propagate to the whole pipeline — `FOREIGN KEY` fails in T-SQL and BigQuery, and Flink SQL rejects multi-line statements (see [Supported dialects](#supported-dialects)).
+Phase 1 is currently hardwired to [`node-sql-parser`](https://www.npmjs.com/package/node-sql-parser). Its limitations propagate to the whole pipeline `FOREIGN KEY` fails in T-SQL and BigQuery, and Flink SQL rejects multi-line statements (see [Supported dialects](#supported-dialects)).
 
-The clean extension point is to abstract Phase 1 behind a small `SqlParser` interface — `(sqlContent, dialect) → SchemaModel` — and select a backend per dialect. Because `SchemaModel` is the boundary, **only Phase 1 changes**; the analyzer and serializer are untouched. Candidate backends:
+The clean extension point is to abstract Phase 1 behind a small `SqlParser` interface `(sqlContent, dialect) → SchemaModel` and select a backend per dialect. Because `SchemaModel` is the boundary, **only Phase 1 changes**; the analyzer and serializer are untouched. Candidate backends:
 
-- **[pgsql-parser](https://github.com/launchql/pgsql-parser)** / **[Supabase pg-parser](https://github.com/supabase-community/pg-parser)** — the real PostgreSQL grammar compiled to WASM; far higher fidelity for PostgreSQL-family DDL.
-- **[sql-ddl-to-json-schema](https://www.npmjs.com/package/sql-ddl-to-json-schema)** — DDL-focused, emits structured JSON directly.
-- **[SQLGlot](https://github.com/tobymao/sqlglot)** — Python, 30+ dialects; usable via a subprocess/service if a wider dialect matrix is needed.
+- **[pgsql-parser](https://github.com/launchql/pgsql-parser)** / **[Supabase pg-parser](https://github.com/supabase-community/pg-parser)**:the real PostgreSQL grammar compiled to WASM; far higher fidelity for PostgreSQL-family DDL.
+- **[sql-ddl-to-json-schema](https://www.npmjs.com/package/sql-ddl-to-json-schema)**: DDL-focused, emits structured JSON directly.
+- **[SQLGlot](https://github.com/tobymao/sqlglot)**: Python, 30+ dialects; usable via a subprocess/service if a wider dialect matrix is needed.
 
 ### Richer ER output from already-captured data
 
-`SchemaModel` already captures fields the analyzer does not yet use — `CHECK` constraints, `DEFAULT` values, column comments, `ON DELETE` / `ON UPDATE` actions, and auto-increment. These could surface as annotations or constraints in the ER model without touching Phase 1.
+`SchemaModel` already captures fields the analyzer does not yet use: `CHECK` constraints, `DEFAULT` values, column comments, `ON DELETE` / `ON UPDATE` actions, and auto-increment. These could surface as annotations or constraints in the ER model without touching Phase 1.
 
 ### Data-instance–based inference
 
@@ -494,18 +456,18 @@ All current inference is DDL-only. Sampling actual rows (as in the reverse-engin
 
 ### Similar tools
 
-- [SchemaSpy](https://schemaspy.org/) — Java tool that reverse-engineers a live database into interactive ER diagrams (HTML).
-- [SQLFlow (dpriver)](https://www.dpriver.com/blog/2023/02/convert-sql-into-e-r-diagram-with-sqlflow/) — converts `CREATE` / `ALTER` scripts into ER diagrams.
-- [Visual Paradigm — Database Engineering](https://www.visual-paradigm.com/features/database-engineering-tools/) — reverse-engineers ERDs from `.ddl` / `.sql`.
-- [DiagramDB — SQL to ERD](https://diagramdb.com/sql-to-erd) and [sqltoerdiagram.com](https://sqltoerdiagram.com/) — browser-based `CREATE TABLE` → ERD generators.
+- [SchemaSpy](https://schemaspy.org/): Java tool that reverse-engineers a live database into interactive ER diagrams (HTML).
+- [SQLFlow (dpriver)](https://www.dpriver.com/blog/2023/02/convert-sql-into-e-r-diagram-with-sqlflow/): converts `CREATE` / `ALTER` scripts into ER diagrams.
+- [Visual Paradigm — Database Engineering](https://www.visual-paradigm.com/features/database-engineering-tools/): reverse-engineers ERDs from `.ddl` / `.sql`.
+- [DiagramDB — SQL to ERD](https://diagramdb.com/sql-to-erd) and [sqltoerdiagram.com](https://sqltoerdiagram.com/): browser-based `CREATE TABLE` → ERD generators.
 
 ### SQL parser libraries
 
-- [node-sql-parser](https://www.npmjs.com/package/node-sql-parser) — the parser this feature uses.
-- [pgsql-parser](https://github.com/launchql/pgsql-parser) · [Supabase pg-parser](https://github.com/supabase-community/pg-parser) — real Postgres grammar (WASM).
-- [sql-ddl-to-json-schema](https://www.npmjs.com/package/sql-ddl-to-json-schema) — DDL → JSON Schema.
-- [SQLGlot](https://github.com/tobymao/sqlglot) — multi-dialect parser/transpiler (Python).
-- [Bytebase — Top Open-Source SQL Parsers](https://www.bytebase.com/blog/top-open-source-sql-parsers/) — comparison overview.
+- [node-sql-parser](https://www.npmjs.com/package/node-sql-parser): the parser this feature uses.
+- [pgsql-parser](https://github.com/launchql/pgsql-parser) · [Supabase pg-parser](https://github.com/supabase-community/pg-parser): real Postgres grammar (WASM).
+- [sql-ddl-to-json-schema](https://www.npmjs.com/package/sql-ddl-to-json-schema): DDL → JSON Schema.
+- [SQLGlot](https://github.com/tobymao/sqlglot): multi-dialect parser/transpiler (Python).
+- [Bytebase — Top Open-Source SQL Parsers](https://www.bytebase.com/blog/top-open-source-sql-parsers/):  comparison overview.
 
 ### Articles & academic background
 
