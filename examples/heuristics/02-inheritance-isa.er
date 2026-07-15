@@ -1,0 +1,12 @@
+erdiagram ImportedFromSql
+notation = uml
+
+entity Customer {
+    id: INT key
+    name: VARCHAR(100)
+}
+
+entity PremiumCustomer extends Customer {
+    customer_id: INT key
+    discount_rate: DECIMAL(4, 2)
+}

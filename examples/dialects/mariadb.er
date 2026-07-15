@@ -1,0 +1,16 @@
+erdiagram ImportedFromSql
+notation = uml
+
+entity Customer {
+    id: INT key
+    email: VARCHAR(255)
+}
+
+entity Orders {
+    id: INT key
+    customer_id: INT
+}
+
+relationship CustomerOrders {
+    Customer [1] -> Orders [1..N]
+}

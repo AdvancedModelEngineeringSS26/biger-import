@@ -1,0 +1,17 @@
+erdiagram ImportedFromSql
+notation = uml
+
+entity Category {
+    id: INT key
+    name: VARCHAR(100)
+}
+
+entity Product {
+    id: INT key
+    name: VARCHAR(255)
+    price: DECIMAL(10, 2)
+}
+
+relationship CategoryProduct {
+    Category [0..N] -> Product [0..N]
+}

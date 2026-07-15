@@ -1,0 +1,17 @@
+erdiagram ImportedFromSql
+notation = uml
+
+entity Customer {
+    id: INT key
+    name: VARCHAR(100)
+}
+
+entity Order {
+    id: INT key
+    order_date: TIMESTAMP
+    customer_id: INT
+}
+
+relationship CustomerOrder {
+    Customer [1] -> Order [1..N]
+}

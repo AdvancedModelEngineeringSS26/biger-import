@@ -1,0 +1,85 @@
+erdiagram ImportedFromSql
+notation = uml
+
+entity User {
+    id: INT key
+    username: VARCHAR(50)
+    email: VARCHAR(255)
+    bio: TEXT optional
+    created_at: TIMESTAMP
+}
+
+entity Admin extends User {
+    user_id: INT key
+    access_level: INT
+}
+
+entity Profile {
+    id: INT key
+    user_id: INT
+    avatar_url: VARCHAR(255) optional
+}
+
+entity Post {
+    id: INT key
+    title: VARCHAR(200)
+    body: TEXT
+    author_id: INT
+    published_at: TIMESTAMP optional
+}
+
+entity PostRevision {
+    post_id: INT key
+    editor_id: INT key
+    edited_at: TIMESTAMP
+}
+
+weak entity Comment {
+    post_id: INT key
+    comment_no: INT partial_key
+    author_id: INT
+    moderator_id: INT optional
+    parent_comment_id: INT optional
+    body: TEXT
+}
+
+entity Tag {
+    id: INT key
+    name: VARCHAR(50)
+}
+
+relationship UserProfile {
+    User [1] -> Profile [1]
+}
+
+relationship UserPost {
+    User [1] -> Post [1..N]
+}
+
+relationship PostPostRevision {
+    Post [1] -> PostRevision [1..N]
+}
+
+relationship UserPostRevision {
+    User [1] -> PostRevision [1..N]
+}
+
+weak relationship PostComment {
+    Post [1] -> Comment [1..N]
+}
+
+relationship UserComment {
+    User [1] -> Comment [1..N]
+}
+
+relationship UserCommentRel {
+    User [1] -> Comment [0..N]
+}
+
+relationship CommentParentComment {
+    Comment [1] -> Comment [0..N]
+}
+
+relationship PostTag {
+    Post [0..N] -> Tag [0..N]
+}

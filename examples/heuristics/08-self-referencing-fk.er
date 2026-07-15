@@ -1,0 +1,12 @@
+erdiagram ImportedFromSql
+notation = uml
+
+entity Employee {
+    id: INT key
+    name: VARCHAR(100)
+    manager_id: INT optional
+}
+
+relationship EmployeeManager {
+    Employee [1] -> Employee [0..N]
+}

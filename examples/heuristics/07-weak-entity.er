@@ -1,0 +1,17 @@
+erdiagram ImportedFromSql
+notation = uml
+
+entity Warehouse {
+    id: INT key
+    city: VARCHAR(100)
+}
+
+weak entity Bin {
+    warehouse_id: INT key
+    bin_code: VARCHAR(10) partial_key
+    capacity: INT optional
+}
+
+weak relationship WarehouseBin {
+    Warehouse [1] -> Bin [1..N]
+}

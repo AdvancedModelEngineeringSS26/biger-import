@@ -1,0 +1,21 @@
+erdiagram ImportedFromSql
+notation = uml
+
+entity Warehouse {
+    id: INT key
+    city: VARCHAR(100)
+}
+
+entity Shipment {
+    id: INT key
+    origin_warehouse_id: INT
+    dest_warehouse_id: INT
+}
+
+relationship WarehouseShipment {
+    Warehouse [1] -> Shipment [1..N]
+}
+
+relationship WarehouseShipmentRel {
+    Warehouse [1] -> Shipment [1..N]
+}

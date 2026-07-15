@@ -1,0 +1,26 @@
+erdiagram ImportedFromSql
+notation = uml
+
+entity Order {
+    id: INT key
+}
+
+entity Product {
+    id: INT key
+    name: VARCHAR(255)
+    price: DECIMAL(10, 2)
+}
+
+entity OrderItem {
+    order_id: INT key
+    product_id: INT key
+    quantity: INT
+}
+
+relationship OrderOrderItem {
+    Order [1] -> OrderItem [1..N]
+}
+
+relationship ProductOrderItem {
+    Product [1] -> OrderItem [1..N]
+}

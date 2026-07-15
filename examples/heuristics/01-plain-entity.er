@@ -1,0 +1,10 @@
+erdiagram ImportedFromSql
+notation = uml
+
+entity Customer {
+    id: INT key
+    name: VARCHAR(100)
+    email: VARCHAR(255)
+    phone: VARCHAR(20) optional
+    balance: DECIMAL(10, 2)
+}
